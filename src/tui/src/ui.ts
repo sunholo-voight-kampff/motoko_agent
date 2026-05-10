@@ -1599,26 +1599,37 @@ export class AgentUI {
       // ctrl+t: cycle backward through think blocks (most recent → oldest → wrap).
       // Does not interfere with the follow-up editor.
       if (matchesKey(data, "ctrl+t") && this.thinkStepOrder.length > 0) {
-        // Toggle-first cycling: if the currently-selected block is
-        // expanded, collapse it (and clear selection). Otherwise cycle
-        // backward to the next block (most recent → oldest → wrap).
-        // This gives single-block users a working hide-on-second-press
-        // and multi-block users still get cycle behavior — they just
-        // need an extra press between blocks (collapse-then-expand-next),
-        // which keeps the "what's currently visible" mental model clean.
-        if (this.selectedThinkIdx >= 0) {
-          const current = this.thinkBlocks.get(this.thinkStepOrder[this.selectedThinkIdx]!);
-          if (current?.expanded) {
-            this.collapseThinkBlock(current);
-            this.selectedThinkIdx = -1;
-            this.tui.requestRender();
-            return { consume: true };
+        // Toggle-all: expand every think/reason block if ANY is
+        // collapsed; collapse every block otherwise. Cleaner mental
+        // model than per-block cycling, especially when a single step
+        // has BOTH a [think] (tag-convention) AND a [reason] (API-level)
+        // block that the user wants to see together.
+        //
+        // Per-key-repeat behavior: macOS terminals send a single
+        // sequence per physical key event by default; key-repeat fires
+        // multiple events. With toggle-all, repeats just flip the same
+        // state back and forth (visually neutral on long-press) instead
+        // of advancing through cycle indices like the prior impl did.
+        const anyCollapsed = this.thinkStepOrder.some((key) => {
+          const b = this.thinkBlocks.get(key);
+          return b !== undefined && !b.expanded;
+        });
+        if (anyCollapsed) {
+          for (const key of this.thinkStepOrder) {
+            const b = this.thinkBlocks.get(key);
+            if (b && !b.expanded) this.expandThinkBlock(b);
           }
+          // Track most-recent expansion so the kind-aware header
+          // re-renderer knows where focus "is" if user later does
+          // any selection-based action.
+          this.selectedThinkIdx = this.thinkStepOrder.length - 1;
+        } else {
+          for (const key of this.thinkStepOrder) {
+            const b = this.thinkBlocks.get(key);
+            if (b?.expanded) this.collapseThinkBlock(b);
+          }
+          this.selectedThinkIdx = -1;
         }
-        const nextIdx = this.selectedThinkIdx === -1
-          ? this.thinkStepOrder.length - 1
-          : (this.selectedThinkIdx - 1 + this.thinkStepOrder.length) % this.thinkStepOrder.length;
-        this.selectThinkBlock(nextIdx);
         this.tui.requestRender();
         return { consume: true };
       }
