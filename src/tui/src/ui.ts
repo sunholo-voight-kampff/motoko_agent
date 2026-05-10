@@ -1852,13 +1852,31 @@ export class AgentUI {
           const finalVisible = this.stripToolJsonBlocks(buf?.text ?? "").trim();
           const tagged = extractTaggedThinkAnswer(finalVisible);
           const hasPlannedTools = (this.plannedToolOrderByStep.get(event.step)?.length ?? 0) > 0;
-          const preferred = hasPlannedTools ? "" : (tagged?.answer ?? finalVisible);
+          // Unclosed-thinking fallback: when the model emits an opening
+          // <thinking> tag but never closes it (DeepSeek v4-flash via
+          // OpenRouter does this — it produces BOTH a delta.reasoning
+          // stream AND a redundant <thinking>...</thinking> block in
+          // delta.content but sometimes forgets the closing tag), the
+          // raw buffer leaks into finalVisible and the user sees the
+          // whole reasoning inline. Strip the unclosed body and surface
+          // it as a [think] block instead, so the visible pane shows
+          // only what came after (or a placeholder if nothing did).
+          let renderText = finalVisible;
+          let extraThink = tagged?.think;
+          if (!tagged) {
+            const openIdx = finalVisible.search(/<think(?:ing)?\s*>/i);
+            if (openIdx >= 0) {
+              renderText = finalVisible.slice(0, openIdx).trim();
+              extraThink = finalVisible.slice(openIdx).replace(/<\/?\s*think(?:ing)?\s*>/gi, "").trim();
+            }
+          }
+          const preferred = hasPlannedTools ? "" : (tagged?.answer ?? renderText);
           const finalForRender = this.finalOnly ? (tagged?.answer ?? "") : preferred;
           if (hasPlannedTools) {
-            const thinkForBlock = tagged?.think ?? finalVisible;
+            const thinkForBlock = extraThink ?? renderText;
             if (thinkForBlock) this.addThinkBlock(event.step, thinkForBlock);
-          } else if (tagged?.think) {
-            this.addThinkBlock(event.step, tagged.think);
+          } else if (extraThink) {
+            this.addThinkBlock(event.step, extraThink);
           }
           if (event.status === "completed") {
             if (!this.finalOnly && finalForRender.length > 0) {
