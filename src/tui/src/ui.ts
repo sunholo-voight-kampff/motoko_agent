@@ -1599,6 +1599,22 @@ export class AgentUI {
       // ctrl+t: cycle backward through think blocks (most recent → oldest → wrap).
       // Does not interfere with the follow-up editor.
       if (matchesKey(data, "ctrl+t") && this.thinkStepOrder.length > 0) {
+        // Toggle-first cycling: if the currently-selected block is
+        // expanded, collapse it (and clear selection). Otherwise cycle
+        // backward to the next block (most recent → oldest → wrap).
+        // This gives single-block users a working hide-on-second-press
+        // and multi-block users still get cycle behavior — they just
+        // need an extra press between blocks (collapse-then-expand-next),
+        // which keeps the "what's currently visible" mental model clean.
+        if (this.selectedThinkIdx >= 0) {
+          const current = this.thinkBlocks.get(this.thinkStepOrder[this.selectedThinkIdx]!);
+          if (current?.expanded) {
+            this.collapseThinkBlock(current);
+            this.selectedThinkIdx = -1;
+            this.tui.requestRender();
+            return { consume: true };
+          }
+        }
         const nextIdx = this.selectedThinkIdx === -1
           ? this.thinkStepOrder.length - 1
           : (this.selectedThinkIdx - 1 + this.thinkStepOrder.length) % this.thinkStepOrder.length;
