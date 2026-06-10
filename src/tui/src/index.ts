@@ -756,7 +756,10 @@ async function main(): Promise<void> {
     profileAgent.model ??
     "anthropic/claude-sonnet-4-6";
   const systemPrompt = systemPromptForWorkspace(projectRoot, workdir);
-  const openaiBaseUrl = process.env.OPENAI_BASE_URL ?? profileAgent.openaiBaseUrl ?? "";
+  const openaiBaseUrl =
+    process.env.OPENAI_BASE_URL && process.env.OPENAI_BASE_URL.trim() !== ""
+      ? process.env.OPENAI_BASE_URL
+      : profileAgent.openaiBaseUrl ?? "";
   const aiOptionsJson = process.env.MOTOKO_AI_OPTIONS_JSON ?? profileAgent.aiOptionsJson ?? "";
 
   let brainVersion = "unknown";
