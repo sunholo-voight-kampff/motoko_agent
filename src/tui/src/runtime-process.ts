@@ -347,6 +347,12 @@ export class RuntimeProcess {
         process.env.MOTOKO_COST_INPUT_PER_1M_MILLICENTS ?? "",
       MOTOKO_COST_OUTPUT_PER_1M_MILLICENTS:
         process.env.MOTOKO_COST_OUTPUT_PER_1M_MILLICENTS ?? "",
+      // M-OLLAMA-PER-MODEL-MAX-TOKENS (PR #48): forward the per-model output
+      // budget the AILANG adapter sets from models.yml max_output_tokens.
+      // Without this allowlist entry the var is scrubbed and the ollama /v1
+      // path falls back to the 16384 floor — truncating qwen3.6's long
+      // reasoning (finish_reason=length) before the tool call on some turns.
+      AILANG_OLLAMA_MAX_TOKENS: process.env.AILANG_OLLAMA_MAX_TOKENS ?? "",
     };
     // AILANG v0.15.x migration: forward AILANG_STDLIB_PATH if set in the
     // parent env so callers can point the runtime at an upstream stdlib
