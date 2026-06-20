@@ -55,7 +55,7 @@ import src/core/types (Msg, ToolBackend)
 import src/core/config (CostRates)
 import std/option (Option, Some, None)
 import pkg/sunholo/motoko_ext_abi/types (BudgetPlan, ExtCtx, ExtRuntime, PolicyDefault, ResponseInterceptDecision, FinalizeDecision, ToolPolicyDecision, ToolHandleDecision, ExtensionHooks)
-import src/core/compaction (compact_step)
+import src/core/compaction (compact_step, usage_percent)
 import src/core/context_usage (context_limit_for)
 import src/core/ext/runtime (dispatch_response_intercept, dispatch_solver_candidate, dispatch_tool_policy, dispatch_tool_handle, dispatch_pre_step)
 import pkg/sunholo/motoko_ext_abi/types (PreStepDecision, PassThrough, Compacted)
@@ -1111,6 +1111,19 @@ func loop_v2(
       })
     },
     Ok(compacted_msgs) => {
+    -- M-AILANG-SEMANTIC-CONTEXT observability: emit a compaction_structural
+    -- event whenever structural compaction actually elided (usage >= 70%, the
+    -- compact_step no-op threshold). compact_step stays pure; we recompute the
+    -- usage % here (a cheap O(n) fold) so the eval harness can track
+    -- compaction-fire-rate as a leading indicator of convergence thrash.
+    let structural_pct = usage_percent(msgs_after_ext, model);
+    let _ = if structural_pct >= 70 then
+      emit_event(session_id, "compaction_structural", [
+        kv("step", jnum(_int_to_float(step_idx))),
+        kv("level", jnum(_int_to_float(structural_pct))),
+        kv("model", js(model))
+      ])
+    else ();
     let stream_id = "step-${show(step_idx)}";
     let _ = emit_event(session_id, "thinking_stream_start", [
       kv("step", jnum(_int_to_float(step_idx))),
