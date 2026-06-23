@@ -141,7 +141,7 @@ func parse_edit_ops_rec(xs: [Json]) -> [EditOp] {
 }
 
 export pure func backend_for(call: ToolCallEnvelope, ohmy_pi: bool) -> ToolBackend {
-  if call.tool == "ReadFile" || call.tool == "WriteFile" || call.tool == "EditFile" || call.tool == "Search" then
+  if call.tool == "ReadFile" || call.tool == "WriteFile" || call.tool == "EditFile" || call.tool == "Search"|| call.tool == "EditDecl" || call.tool == "ReadInterface" then
     if ohmy_pi then Delegated else Native
   else if call.tool == "BashExec" || call.tool == "RunTests" then
     if needs_delegation_for_process(parse_exec_from_args(call.arguments)) then Delegated else Native
@@ -166,12 +166,16 @@ func run_native_call(call: ToolCallEnvelope, workdir: string) -> ToolResultItem 
   let args = call.arguments;
   if call.tool == "ReadFile" then
     run_read_file(call.id, arg_string(args, "path", ""), arg_number(args, "start", 1), arg_number(args, "end", 200), workdir)
+  else if call.tool == "ReadInterface" then
+    run_read_interface(call.id, arg_string(args, "path", ""), workdir)
   else if call.tool == "Search" then
     run_search(call.id, arg_string(args, "pattern", ""), arg_string(args, "dir", "."), workdir)
   else if call.tool == "WriteFile" then
     run_write_file(call.id, arg_string(args, "path", ""), arg_string(args, "content", ""), workdir)
   else if call.tool == "EditFile" then
     run_edit_file(call.id, arg_string(args, "path", ""), parse_edit_ops(arg_json(args, "edits")), arg_bool(args, "dry_run", false), arg_string(args, "expected_sha256", ""), workdir)
+  else if call.tool == "EditDecl" then
+    run_edit_decl(call.id, arg_string(args, "path", ""), arg_string(args, "decl", ""), arg_string(args, "new_body", ""), workdir)
   else if call.tool == "BashExec" then
     run_process_result("BashExec", call.id, parse_exec_from_args(args))
   else if call.tool == "RunTests" then
@@ -420,32 +424,82 @@ pure func resolve_workdir_path_handles_under_wd_abs() -> bool
       && resolve_workdir_path("/tmp/wd/", "src/foo.ail")      == "/tmp/wd/src/foo.ail"
   }
 
+-- env_via_sh reads an env var through the Process effect (already in this handler's effect
+-- row), so the AST auto-read gate needs no Env effect or signature changes. Bare $VAR is a
+-- literal in AILANG strings (only ${..} interpolates), so sh does the expansion.
+func env_via_sh(shell_expr: string) -> string ! {Process} {
+  match exec("sh", ["-c", shell_expr]) {
+    Ok(out) => if out.exitCode == 0 then trim(toString(out.stdout)) else "",
+    Err(_) => ""
+  }
+}
+
+-- True if any non-empty entry of `parts` is a substring of `hay` (path-suffix allowlist).
+func any_substr_match(parts: [string], hay: string) -> bool {
+  match parts {
+    [] => false,
+    p :: rest => if p != "" && contains(hay, p) then true else any_substr_match(rest, hay)
+  }
+}
+
+-- The full-source read (the original ReadFile behavior): ranged read + cap_context.
+func read_full_file(id: string, path: string, resolved: string, start: int, end: int) -> ToolResultItem ! {FS} {
+  match readFileResult(resolved) {
+    Err(msg) => ToolErrorResult({ id: id, tool: "ReadFile", message: msg }),
+    Ok(content) => {
+      let lines = split(content, "\n");
+      let total = line_count_of(content);
+      let r = normalize_range(start, end);
+      let selected = select_lines(lines, 1, r.start, r.end);
+      let shown = join_lines(selected);
+      ReadFileResult({
+        id: id,
+        path: path,
+        content: cap_context(shown, 16000),
+        line_count: total,
+        truncated: total > list_len(selected),
+        sha256: sha256Hex(content)
+      })
+    }
+  }
+}
+
+-- AST AUTO-READ (gated, default off). When MOTOKO_AST_AUTOREAD is set, ReadFile on a
+-- *dependency* .ail module returns its compact AST interface (ailang iface --compact) instead
+-- of full source: the docx trace showed the model re-reading sibling parsers as full files
+-- 12x/8x when it only needed their API. Paths matching a MOTOKO_AST_READ_FULL entry (the edit
+-- target) keep full source; iface failure falls back to a full read.
 func run_read_file(id: string, path: string, start: int, end: int, workdir: string) -> ToolResultItem ! {FS, Process} {
   match validate_path_common("ReadFile", id, path, workdir) {
     Err(e) => e,
     Ok(_) => {
       let resolved = resolve_workdir_path(workdir, path);
-      -- M-AILANG-FS-RESULT (v0.16.0): use readFileResult so transient
-      -- failures (file vanished mid-read, permission denied, sandbox
-      -- violation) get caught here as a structured ToolErrorResult
-      -- instead of escaping as a runtime panic that kills the agent.
-      match readFileResult(resolved) {
-        Err(msg) => ToolErrorResult({ id: id, tool: "ReadFile", message: msg }),
-        Ok(content) => {
-          let lines = split(content, "\n");
-          let total = line_count_of(content);
-          let r = normalize_range(start, end);
-          let selected = select_lines(lines, 1, r.start, r.end);
-          let shown = join_lines(selected);
-          ReadFileResult({
-            id: id,
-            path: path,
-            content: shown,
-            line_count: total,
-            truncated: total > list_len(selected),
-            sha256: sha256Hex(content)
-          })
+      let is_ail = endsWith(resolved, ".ail");
+      let autoread = if is_ail then env_via_sh("printf %s \"$MOTOKO_AST_AUTOREAD\"") else "";
+      let route_iface =
+        if autoread == "" then false
+        else not any_substr_match(split(env_via_sh("printf %s \"$MOTOKO_AST_READ_FULL\""), ":"), resolved);
+      if route_iface then {
+        match exec("ailang", ["iface", "--compact", resolved]) {
+          Err(_) => read_full_file(id, path, resolved, start, end),
+          Ok(out) => {
+            if out.exitCode == 0 then {
+              let body = toString(out.stdout);
+              ReadFileResult({
+                id: id,
+                path: path,
+                content: "-- [AST auto-read] compact interface for dependency module ${path}; use BashExec cat to see the full implementation if needed.\n${body}",
+                line_count: 0,
+                truncated: true,
+                sha256: ""
+              })
+            } else {
+              read_full_file(id, path, resolved, start, end)
+            }
+          }
         }
+      } else {
+        read_full_file(id, path, resolved, start, end)
       }
     }
   }
@@ -613,6 +667,48 @@ func run_write_file(id: string, path: string, content: string, workdir: string) 
             diff: build_write_file_diff(path, before, content, existed_before)
           })
         }
+      }
+    }
+  }
+}
+
+func run_edit_decl(id: string, path: string, decl: string, new_body: string, workdir: string) -> ToolResultItem ! {FS, Process} {
+  match validate_path_common("EditDecl", id, path, workdir) {
+    Err(e) => e,
+    Ok(_) => {
+      let resolved = resolve_workdir_path(workdir, path);
+      if not fileExists(resolved) then
+        ToolErrorResult({ id: id, tool: "EditDecl", message: "file does not exist: ${path}" })
+      else {
+        let tmp = "${resolved}.editdecl.new";
+        match writeFileResult(tmp, new_body) {
+          Err(msg) => ToolErrorResult({ id: id, tool: "EditDecl", message: "cannot stage new body: ${msg}" }),
+          Ok(_) => match exec("ailang", ["ast-edit", "replace", "--file", resolved, "--decl", decl, "--new", tmp, "--in-place"]) {
+            Err(err) => ToolErrorResult({ id: id, tool: "EditDecl", message: process_error_to_string(err) }),
+            Ok(out) =>
+              if out.exitCode == 0 then
+                WriteFileResult({ id: id, path: path, bytes_written: length(new_body), sha256: sha256Hex(new_body), diff: "(EditDecl: replaced top-level decl '${decl}')" })
+              else
+                ToolErrorResult({ id: id, tool: "EditDecl", message: "ast-edit replace failed (decl '${decl}' not found?): ${toString(out.stderr)}" })
+          }
+        }
+      }
+    }
+  }
+}
+
+func run_read_interface(id: string, path: string, workdir: string) -> ToolResultItem ! {FS, Process} {
+  match validate_path_common("ReadInterface", id, path, workdir) {
+    Err(e) => e,
+    Ok(_) => {
+      let resolved = resolve_workdir_path(workdir, path);
+      match exec("ailang", ["iface", "--compact", resolved]) {
+        Err(err) => ToolErrorResult({ id: id, tool: "ReadInterface", message: process_error_to_string(err) }),
+        Ok(out) =>
+          if out.exitCode == 0 then
+            ReadFileResult({ id: id, path: path, content: toString(out.stdout), line_count: 0, truncated: false, sha256: "" })
+          else
+            ToolErrorResult({ id: id, tool: "ReadInterface", message: "ailang iface failed: ${toString(out.stderr)}" })
       }
     }
   }
@@ -839,8 +935,22 @@ func cmd_args_suffix(args: [string]) -> string {
   }
 }
 
+-- cap_context truncates tool-result content entering the model context. A single oversized result
+-- (e.g. a 1.76MB `ailang check --package` error dump, or a binary-file read) otherwise blows the context
+-- window past what compaction can recover — compaction only elides OLD tool results, never the current
+-- one — hard-stopping the run. Keep head+tail (errors cluster at both ends) plus a truncation note so the
+-- model knows to narrow its command.
+pure func cap_context(s: string, budget: int) -> string {
+  let n = length(s);
+  if n <= budget then s
+  else {
+    let half = budget / 2;
+    "${substring(s, 0, half)}\n\n... [output truncated: showing ${show(budget)} of ${show(n)} chars \u2014 narrow the command or read a smaller range for the rest] ...\n\n${substring(s, n - half, n)}"
+  }
+}
+
 func to_bash_result(id: string, req: ProcessExecReq, out: ProcessOutput) -> ToolResultItem {
-  let stdout = toString(out.stdout);
+  let stdout = cap_context(toString(out.stdout), 16000);
   let stderr = toString(out.stderr);
   BashExecResult({
     id: id,
@@ -853,7 +963,7 @@ func to_bash_result(id: string, req: ProcessExecReq, out: ProcessOutput) -> Tool
 }
 
 func to_test_result(id: string, req: ProcessExecReq, out: ProcessOutput) -> ToolResultItem {
-  let stdout = toString(out.stdout);
+  let stdout = cap_context(toString(out.stdout), 16000);
   let stderr = toString(out.stderr);
   let failed = if out.exitCode == 0 then 0 else 1;
   let passed = if out.exitCode == 0 then 1 else 0;
@@ -993,7 +1103,7 @@ func t_normalize_relative_path() -> bool
 -- use the normal delegation check (streaming/hard-cancel requirements).
 -- See: design_docs/planned/m-motoko-path-doubling-v2.md
 export pure func backend_for_v2(call: ToolCallEnvelope, ohmy_pi: bool) -> ToolBackend {
-  if call.tool == "ReadFile" || call.tool == "WriteFile" || call.tool == "EditFile" || call.tool == "Search" then
+  if call.tool == "ReadFile" || call.tool == "WriteFile" || call.tool == "EditFile" || call.tool == "Search"|| call.tool == "EditDecl" || call.tool == "ReadInterface" then
     Native
   else
     backend_for(call, ohmy_pi)
