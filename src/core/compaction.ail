@@ -41,8 +41,14 @@ export pure func estimate_tokens_messages(msgs: [Message]) -> int {
 -- contracts: SKIPPED — depends on foldl-based estimate_tokens_messages
 export pure func usage_percent(msgs: [Message], model: string) -> int {
   let limit = context_limit_for(model);
-  if limit == 0 then 0
-  else (estimate_tokens_messages(msgs) * 100) / limit
+  -- Reserve ~75k headroom for the model's OUTPUT. context_limit is the TOTAL input+output window,
+  -- so compaction must keep INPUT well below it. docx overflowed at input 263259 > 262144 because
+  -- usage was measured against the FULL window — compaction never reserved output room and let input
+  -- crowd the hard limit. 75k covers the 65536 output cap + estimate margin. Small (rotation)
+  -- contexts stay ~0% so this only bites large-context tasks (compacts them earlier, as intended).
+  let effective = limit - 75000;
+  if limit == 0 || effective <= 0 then 0
+  else (estimate_tokens_messages(msgs) * 100) / effective
 }
 
 -- Count tool-role messages in the list.
