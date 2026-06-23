@@ -1067,6 +1067,23 @@ func loop_v2(
             loop_v2(rt, task, env_url, hybrid_tools, budget, model, next_msgs, workdir, step_idx + 1, step_budget - 1, ohmy_pi, max_cost_millicents, cost_rates, new_totals, next_provider, session_id, started_at_ms)
           },
           NoIntercept => {
+            let continue_on_trunc = getEnvOr("MOTOKO_CONTINUE_ON_TRUNCATION", "1") != "0";
+            if result.finish_reason == "length" && continue_on_trunc then {
+              -- #13 fix: `length` = the model was TRUNCATED mid-generation (e.g. a runaway
+              -- reasoning trace hitting the token cap), NOT done. Re-prompt to continue rather
+              -- than ending the run. Bounded by step_budget. Disable: MOTOKO_CONTINUE_ON_TRUNCATION=0.
+              let _ = emit_event(session_id, "truncated_continue", [
+                kv("step", jnum(_int_to_float(step_idx)))
+              ]);
+              let continue_msg: Message = {
+                role: "user",
+                content: "Your previous response was cut off by the token limit before you finished. Do not repeat your earlier reasoning. Continue now and call a tool to make concrete progress (write or edit a file, then run ailang check).",
+                tool_calls: [],
+                tool_call_id: ""
+              };
+              let next_msgs = msgs_with_assistant ++ [continue_msg];
+              loop_v2(rt, task, env_url, hybrid_tools, budget, model, next_msgs, workdir, step_idx + 1, step_budget - 1, ohmy_pi, max_cost_millicents, cost_rates, new_totals, next_provider, session_id, started_at_ms)
+            } else
             if result.finish_reason != "tool_calls" then {
               -- M7 hybrid mode: when prose contains a fenced shell block
               -- and hybrid_tools=true, synthesize a BashExec ToolCall and
