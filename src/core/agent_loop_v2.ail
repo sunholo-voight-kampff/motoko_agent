@@ -946,10 +946,23 @@ pure func is_missing_infrastructure(output: string) -> bool {
     || contains(lower, "command not found")
 }
 
+-- workspace_has_ail: is this an AILANG project? (chooses the definition-of-done verifier)
+func workspace_has_ail(workdir: string) -> bool ! {Process} {
+  match exec("bash", ["-c", "cd \"$1\" 2>/dev/null && find . -name '*.ail' 2>/dev/null | head -1", "_d", workdir]) {
+    Ok(o) => contains(toString(o.stdout), ".ail"),
+    Err(_) => false
+  }
+}
+
 func run_dp7_verifier(rt: ExtRuntime, workdir: string) -> FinalizeVerification ! {Process} {
   if not rt.verification.enabled then Approve
-  else
-    match exec("bash", ["-c", "cd \"$1\" && ${rt.verification.command} 2>&1", "_dp7", workdir]) {
+  else {
+    -- AILANG definition-of-done: when verification is on, an AILANG project (.ail files present) is gated by a
+    -- TYPE-CHECK (`ailang check .`) — AILANG's core guarantee, so the agent cannot declare "done" with code that
+    -- doesn't type-check. Non-AILANG projects fall back to the configured build/test command. (Per the user:
+    -- default to a type-check, but only for .ail.)
+    let cmd = if workspace_has_ail(workdir) then "ailang check ." else rt.verification.command;
+    match exec("bash", ["-c", "cd \"$1\" && ${cmd} 2>&1", "_dp7", workdir]) {
       Err(_) => Approve,
       Ok(out) => {
         if out.exitCode == 0 then Approve
@@ -960,6 +973,7 @@ func run_dp7_verifier(rt: ExtRuntime, workdir: string) -> FinalizeVerification !
         }
       }
     }
+  }
 }
 
 func dp7_gate(rt: ExtRuntime, workdir: string, step_idx: int, session_id: string) -> Option[Message] ! {Process, IO, Trace} {
