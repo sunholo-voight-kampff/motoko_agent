@@ -310,6 +310,10 @@ export class RuntimeProcess {
       CLICKSTACK_INGESTION_KEY: process.env.CLICKSTACK_INGESTION_KEY,
       AILANG_FS_SANDBOX: workdir,
       MOTOKO_STREAM_EVENTS: process.env.MOTOKO_STREAM_EVENTS ?? "1",
+      // AST auto-read gate (read by tool_runtime.ail's run_read_file via the Process effect):
+      // ReadFile on a dependency .ail serves the compact interface instead of full source.
+      MOTOKO_AST_AUTOREAD: process.env.MOTOKO_AST_AUTOREAD,
+      MOTOKO_AST_READ_FULL: process.env.MOTOKO_AST_READ_FULL,
       // M-MOTOKO-HEADLESS (2026-05-08): when stdin is not a TTY, set
       // MOTOKO_HEADLESS=1 so the AILANG runtime's conversation_loop_v2
       // skips its readLine() drain (which blocks indefinitely on non-TTY
@@ -373,6 +377,7 @@ export class RuntimeProcess {
       // path falls back to the 16384 floor — truncating qwen3.6's long
       // reasoning (finish_reason=length) before the tool call on some turns.
       AILANG_OLLAMA_MAX_TOKENS: process.env.AILANG_OLLAMA_MAX_TOKENS ?? "",
+      AILANG_OLLAMA_HTTP_TIMEOUT_SEC: process.env.AILANG_OLLAMA_HTTP_TIMEOUT_SEC ?? "",
     };
     // AILANG v0.15.x migration: forward AILANG_STDLIB_PATH if set in the
     // parent env so callers can point the runtime at an upstream stdlib
