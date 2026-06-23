@@ -43,5 +43,5 @@
     ],
     "strict": false
   },
-  "verification": { "enabled": true, "command": "ailang check ." }
+  "verification": { "enabled": true }
 }
