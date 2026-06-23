@@ -2,7 +2,7 @@
   "agent": {
     "model": "ollama/qwen3.5:35b-a3b-mxfp8",
     "workdir": ".",
-    "max_steps": 50,
+    "max_steps": 100,
     "step_delay_ms": 0,
     "max_retries": 3,
     "retry_base_ms": 1000,
@@ -18,21 +18,30 @@
     "port": 8080,
     "auto_start": true,
     "command": "bun",
-    "args": ["src/tui/src/env-server-main.ts"],
+    "args": [
+      "src/tui/src/env-server-main.ts"
+    ],
     "startup_timeout_ms": 5000
   },
   "tools": {
     "hybrid": true,
     "ohmy_pi": false,
-    "snippet_caps": ["IO", "FS", "Process"],
+    "snippet_caps": [
+      "IO",
+      "FS",
+      "Process"
+    ],
     "delegated_timeout_ms": 30000,
     "delegated_poll_ms": 100,
     "delegated_timeout_slack_ms": 5000,
     "edit_mode": "hashline"
   },
   "extensions": {
-    "order": ["compaction_ai", "context_mode"],
+    "order": [
+      "compaction_ai",
+      "context_mode"
+    ],
     "strict": false
   },
-  "verification": {}
+  "verification": { "enabled": true, "command": "ailang check ." }
 }
