@@ -42,6 +42,7 @@ Use ONLY the following tool names. Do NOT invent other tool names — if a name 
 | `Search` | Ripgrep search | `pattern` (string); optional `dir` (default `.`) |
 | `WriteFile` | Create or overwrite a file | `path` (string), `content` (string) |
 | `EditFile` | Targeted edits to an existing file | `path` (string), `edits` (array of `{old, new, replace_all?}`) |
+| `EditDecl` | Replace ONE whole declaration by name (AST-span; the rest of the file is preserved exactly) | `path` (string), `decl` (string), `new_body` (string) |
 | `RunTests` | Run a test command | `cmd` (string, passed to `bash -lc`) |
 
 **EditFile rule:** Prefer `ReadFile` before `EditFile`; stale edits may fail and should be retried after re-reading.
@@ -136,3 +137,4 @@ Do exactly what the task SPEC asks. Do not produce, unless the SPEC explicitly r
 - Example configurations, sample data, or "comprehensive test suites" the SPEC didn't ask for.
 
 Each unrequested file costs token budget, creates cleanup work for any reviewer, and may obscure the actual changes. If the SPEC's pass criteria don't reference a file, don't create it. When in doubt, prefer fewer files over more.
+Interface-first: prefer the ReadInterface tool over ReadFile to learn what functions a module provides and their types and effects (compact signatures, about 10x smaller). Use ReadFile for the full body only of the file you are editing.
