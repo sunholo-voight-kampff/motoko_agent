@@ -55,7 +55,7 @@ import src/core/types (Msg, ToolBackend)
 import src/core/config (CostRates)
 import std/option (Option, Some, None)
 import pkg/sunholo/motoko_ext_abi/types (BudgetPlan, ExtCtx, ExtRuntime, PolicyDefault, ResponseInterceptDecision, FinalizeDecision, ToolPolicyDecision, ToolHandleDecision, ExtensionHooks)
-import src/core/compaction (compact_step, usage_percent)
+import src/core/compaction (compact_step, compact_step_actual, usage_percent)
 import src/core/context_usage (context_limit_for)
 import src/core/ext/runtime (dispatch_response_intercept, dispatch_solver_candidate, dispatch_tool_policy, dispatch_tool_handle, dispatch_pre_step)
 import pkg/sunholo/motoko_ext_abi/types (PreStepDecision, PassThrough, Compacted)
@@ -1115,7 +1115,11 @@ func loop_v2(
   -- chars/4 over-counted ~1.9x -> premature compaction -> working-set thrash). v3's
   -- real-token SKIP gate was reverted: it used the STALE last-step count and missed a huge
   -- one-step jump (a `cat document.xml` tool result) -> overflow 270K > 262144.
-  match compact_step(msgs_after_ext, model) {
+  -- v5: compact_step_actual drives the elision LEVEL off the provider's ACTUAL last input_tokens
+  -- (ground truth), proactively (gentle keep_last=10 at 60%, emergency at 85% of effective) so we
+  -- neither thrash early (chars/4 v2) nor overflow late (chars/7 v4). Bloat is tool_results (96K
+  -- BashExec/cat XML dumps) which elide_old_tool_results targets. Falls back to estimate at step 0.
+  match compact_step_actual(msgs_after_ext, model, totals.last_input_tokens) {
     Err(compaction_reason) => {
       let _ = emit_event(session_id, "compaction_exhausted", [
         kv("step", jnum(_int_to_float(step_idx))),
