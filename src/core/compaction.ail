@@ -40,7 +40,11 @@ pure func tool_calls_chars(tcs: [ToolCall]) -> int {
 
 export pure func estimate_tokens_messages(msgs: [Message]) -> int {
   let total = foldl(\acc m. acc + length(m.content) + tool_calls_chars(m.tool_calls), 0, msgs);
-  (total + 3) / 4
+  -- chars/7: MEASURED ratio for AILANG code + DOCX XML is ~7.5 chars/token (ollama
+  -- actual 74K vs old chars/4 estimate 138K at the same step -> the old /4 over-counted
+  -- ~1.9x, firing compaction at ~31% of the real 262144 window -> working-set thrash).
+  -- Slightly conservative (/7 > real 7.5) so we compact just BEFORE the true limit.
+  (total + 6) / 7
 }
 
 -- Context usage as integer percent (0-100). Returns 0 for unknown models.

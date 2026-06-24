@@ -1110,17 +1110,12 @@ func loop_v2(
     Ok(msgs_after_ext) => {
   -- DP0b: structural compaction as fallback
   -- compact_step is a no-op below 70% usage; elides old tool_result content
-  -- at 70-85% and 85-95%; at ≥95% tries emergency compaction.
-  -- M-MOTOKO-ACTUAL-TOKENS: the chars/4 estimate over-counts ~1.9x (MEASURED: est 138K vs
-  -- ollama actual 74K), so compact_step fired at ~31% of the REAL 262144 window and shredded
-  -- the working set -> read/test thrash, no convergence. Gate compaction on the PROVIDER's
-  -- actual input_tokens when we have them: SKIP while real usage is low, still compact
-  -- (estimate-based) when genuinely near the limit so we never overflow. Disable: MOTOKO_REAL_TOKEN_COMPACT=0.
-  let real_effective = context_limit_for(model) - 75000;
-  let real_pct = if totals.last_input_tokens > 0 && real_effective > 0 then (totals.last_input_tokens * 100) / real_effective else 0;
-  let gate_on_real = getEnvOr("MOTOKO_REAL_TOKEN_COMPACT", "1") != "0";
-  let compacted_or = if gate_on_real && totals.last_input_tokens > 0 && real_pct < 75 then Ok(msgs_after_ext) else compact_step(msgs_after_ext, model);
-  match compacted_or {
+  -- at 70-85% and 85-95%; at ≥95% tries emergency compaction. The usage % now uses a
+  -- CALIBRATED estimate (chars/7 ~= ollama's measured 7.5 chars/tok for code+XML; the old
+  -- chars/4 over-counted ~1.9x -> premature compaction -> working-set thrash). v3's
+  -- real-token SKIP gate was reverted: it used the STALE last-step count and missed a huge
+  -- one-step jump (a `cat document.xml` tool result) -> overflow 270K > 262144.
+  match compact_step(msgs_after_ext, model) {
     Err(compaction_reason) => {
       let _ = emit_event(session_id, "compaction_exhausted", [
         kv("step", jnum(_int_to_float(step_idx))),
