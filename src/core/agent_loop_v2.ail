@@ -168,11 +168,12 @@ type LoopTotals = {
   cache_read: int,
   cache_creation: int,
   cost_millicents: int,
-  cost_warned_pct: int
+  cost_warned_pct: int,
+  last_input_tokens: int
 }
 
 pure func zero_totals() -> LoopTotals {
-  { input_tokens: 0, output_tokens: 0, cache_read: 0, cache_creation: 0, cost_millicents: 0, cost_warned_pct: 0 }
+  { input_tokens: 0, output_tokens: 0, cache_read: 0, cache_creation: 0, cost_millicents: 0, cost_warned_pct: 0, last_input_tokens: 0 }
 }
 
 -- Emit a schema-v1 event: prepends schema_version + session_id + type to
@@ -1110,7 +1111,16 @@ func loop_v2(
   -- DP0b: structural compaction as fallback
   -- compact_step is a no-op below 70% usage; elides old tool_result content
   -- at 70-85% and 85-95%; at ≥95% tries emergency compaction.
-  match compact_step(msgs_after_ext, model) {
+  -- M-MOTOKO-ACTUAL-TOKENS: the chars/4 estimate over-counts ~1.9x (MEASURED: est 138K vs
+  -- ollama actual 74K), so compact_step fired at ~31% of the REAL 262144 window and shredded
+  -- the working set -> read/test thrash, no convergence. Gate compaction on the PROVIDER's
+  -- actual input_tokens when we have them: SKIP while real usage is low, still compact
+  -- (estimate-based) when genuinely near the limit so we never overflow. Disable: MOTOKO_REAL_TOKEN_COMPACT=0.
+  let real_effective = context_limit_for(model) - 75000;
+  let real_pct = if totals.last_input_tokens > 0 && real_effective > 0 then (totals.last_input_tokens * 100) / real_effective else 0;
+  let gate_on_real = getEnvOr("MOTOKO_REAL_TOKEN_COMPACT", "1") != "0";
+  let compacted_or = if gate_on_real && totals.last_input_tokens > 0 && real_pct < 75 then Ok(msgs_after_ext) else compact_step(msgs_after_ext, model);
+  match compacted_or {
     Err(compaction_reason) => {
       let _ = emit_event(session_id, "compaction_exhausted", [
         kv("step", jnum(_int_to_float(step_idx))),
@@ -1234,7 +1244,8 @@ func loop_v2(
           cache_read:      new_cache_read,
           cache_creation:  new_cache_creation,
           cost_millicents: new_total_cost,
-          cost_warned_pct: new_warned_pct
+          cost_warned_pct: new_warned_pct,
+          last_input_tokens: result.input_tokens
         };
 
         -- M3 DP1a: response-intercept hook. Extensions can synthesize a
