@@ -22,7 +22,7 @@
 
 module src/core/compaction
 
-import std/ai (Message)
+import std/ai (Message, ToolCall)
 import std/string (length, substring)
 import std/list (foldl)
 import std/result (Result, Ok, Err)
@@ -31,8 +31,15 @@ import src/core/context_usage (context_limit_for)
 -- Token estimate for [Message]: sum all content-field lengths, divide by 4.
 -- Same approximation as estimate_tokens for [Msg] in context_usage.ail.
 -- contracts: SKIPPED — uses foldl (Z3 fragment requires non-higher-order)
+-- Sum the serialized size of a message's tool_calls (name + arguments). WriteFile/EditFile carry the FULL
+-- file content in `arguments`, re-sent every turn — counting only `content` (as before) massively undercounts
+-- those turns, so compaction fires too late -> context overflow (docx hit input 263259 > 262144).
+pure func tool_calls_chars(tcs: [ToolCall]) -> int {
+  foldl(\acc tc. acc + length(tc.name) + length(tc.arguments), 0, tcs)
+}
+
 export pure func estimate_tokens_messages(msgs: [Message]) -> int {
-  let total = foldl(\acc m. acc + length(m.content), 0, msgs);
+  let total = foldl(\acc m. acc + length(m.content) + tool_calls_chars(m.tool_calls), 0, msgs);
   (total + 3) / 4
 }
 
