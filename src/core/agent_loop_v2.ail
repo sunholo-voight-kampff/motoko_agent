@@ -888,6 +888,21 @@ func dp7_gate(rt: ExtRuntime, workdir: string, step_idx: int, session_id: string
   }
 }
 
+-- continuation_intent: does the prose signal the model intends to keep working (not done)?
+-- Re-adds, for the typed v2 loop, the heuristic the old text loop had (indicates_continuation_intent).
+pure func continuation_intent(content: string) -> bool {
+  let s = toLower(content);
+  contains(s, "let me")
+    || contains(s, "let's")
+    || contains(s, "now i")
+    || contains(s, "i'll")
+    || contains(s, "i will")
+    || contains(s, "next i")
+    || contains(s, "then i")
+    || contains(s, "going to")
+    || contains(s, "i need to")
+}
+
 func loop_v2(
   rt: ExtRuntime,
   task: string,
@@ -1186,21 +1201,40 @@ func loop_v2(
                   loop_v2(rt, task, env_url, hybrid_tools, budget, model, next_msgs, workdir, step_idx + 1, step_budget - 1, ohmy_pi, max_cost_millicents, cost_rates, new_totals, next_provider, session_id, started_at_ms)
                 },
                 NoDecision => {
-                  match dp7_gate(rt, workdir, step_idx, session_id) {
-                    None => {
-                      -- IMPORTANT: run_summary BEFORE done — see Accept branch
-                      -- above for rationale (TS TUI's process.exit(0) on done
-                      -- would otherwise truncate run_summary mid-flush).
-                      let _ = emit_run_summary(session_id, model, new_totals, step_idx + 1, 0, "", started_at_ms);
-                      let _ = emit_event(session_id, "done", [
-                        kv("step", jnum(_int_to_float(step_idx))),
-                        kv("output", js(result.message.content))
-                      ]);
-                      Ok(msgs_with_assistant)
-                    },
-                    Some(retry_msg) => {
-                      let next_msgs = msgs_with_assistant ++ [retry_msg];
-                      loop_v2(rt, task, env_url, hybrid_tools, budget, model, next_msgs, workdir, step_idx + 1, step_budget - 1, ohmy_pi, max_cost_millicents, cost_rates, new_totals, next_provider, session_id, started_at_ms)
+                  let continue_on_intent = getEnvOr("MOTOKO_CONTINUE_ON_INTENT", "1") != "0";
+                  if continue_on_intent && step_budget > 1 && continuation_intent(result.message.content) then {
+                    -- #19: prose-only turn but the model signals it intends to keep working ("let me check.."). The
+                    -- typed v2 loop used to treat ANY prose-only turn as done, stranding the model mid-task (docx
+                    -- stopped at step 36 mid-exploration, 0 writes). Nudge to act + recurse; bounded by step_budget;
+                    -- disable with MOTOKO_CONTINUE_ON_INTENT=0.
+                    let _ = emit_event(session_id, "continuation_nudge", [
+                      kv("step", jnum(_int_to_float(step_idx)))
+                    ]);
+                    let nudge_msg: Message = {
+                      role: "user",
+                      content: "You ended your turn without calling a tool, but your message says you intend to keep working. Continue now: call a tool to make concrete progress (write or edit a file, then run ailang check). Do not stop until the task is complete and the project type-checks.",
+                      tool_calls: [],
+                      tool_call_id: ""
+                    };
+                    let nudge_next = msgs_with_assistant ++ [nudge_msg];
+                    loop_v2(rt, task, env_url, hybrid_tools, budget, model, nudge_next, workdir, step_idx + 1, step_budget - 1, ohmy_pi, max_cost_millicents, cost_rates, new_totals, next_provider, session_id, started_at_ms)
+                  } else {
+                    match dp7_gate(rt, workdir, step_idx, session_id) {
+                      None => {
+                        -- IMPORTANT: run_summary BEFORE done — see Accept branch
+                        -- above for rationale (TS TUI's process.exit(0) on done
+                        -- would otherwise truncate run_summary mid-flush).
+                        let _ = emit_run_summary(session_id, model, new_totals, step_idx + 1, 0, "", started_at_ms);
+                        let _ = emit_event(session_id, "done", [
+                          kv("step", jnum(_int_to_float(step_idx))),
+                          kv("output", js(result.message.content))
+                        ]);
+                        Ok(msgs_with_assistant)
+                      },
+                      Some(retry_msg) => {
+                        let next_msgs = msgs_with_assistant ++ [retry_msg];
+                        loop_v2(rt, task, env_url, hybrid_tools, budget, model, next_msgs, workdir, step_idx + 1, step_budget - 1, ohmy_pi, max_cost_millicents, cost_rates, new_totals, next_provider, session_id, started_at_ms)
+                      }
                     }
                   }
                 }
