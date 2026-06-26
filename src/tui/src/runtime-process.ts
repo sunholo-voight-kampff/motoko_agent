@@ -4,6 +4,26 @@ import * as path from "path";
 import * as readline from "readline";
 import { createOhMyPiSession } from "./ohMyPi/session-adapter.js";
 import { dispatchOhMyPiTool } from "./ohMyPi/dispatcher.js";
+import { CORE_MAP, EXTENSION_MAPS } from "./config.js";
+
+// autoForwardedEnvKeys — the SINGLE source of truth for which parent env vars reach the
+// AILANG runtime subprocess. The childEnv allowlist below scrubs everything not listed,
+// which has silently broken at least FIVE env-gated features whose var was forgotten:
+// SYSTEM_MD, MOTOKO_REPO, MOTOKO_PERSIST_RETRIES, AILANG_OLLAMA_MAX_TOKENS, AILANG_STDLIB_PATH
+// (AILANG_OLLAMA_MAX_TOKENS was even hand-added twice). Root cause: the allowlist was a second
+// source of truth that drifts from config.ts's CORE_MAP. Instead, derive forwarding from
+// CORE_MAP/EXTENSION_MAPS plus the motoko/ailang namespaces, so a new env-gated feature reaches
+// the .ail BY DEFAULT instead of failing silently. Exported for the drift-guard test.
+export function autoForwardedEnvKeys(env: NodeJS.ProcessEnv): string[] {
+  const keys = new Set<string>([
+    ...Object.values(CORE_MAP).map((e) => e.env),
+    ...Object.values(EXTENSION_MAPS).flatMap((m) => Object.values(m).map((e) => e.env)),
+  ]);
+  for (const k of Object.keys(env)) {
+    if (k.startsWith("MOTOKO_") || k.startsWith("AILANG_") || k === "SYSTEM_MD") keys.add(k);
+  }
+  return [...keys];
+}
 
 export interface DelegatedExecReq {
   cmd: string;
@@ -377,13 +397,6 @@ export class RuntimeProcess {
         process.env.MOTOKO_COST_INPUT_PER_1M_MILLICENTS ?? "",
       MOTOKO_COST_OUTPUT_PER_1M_MILLICENTS:
         process.env.MOTOKO_COST_OUTPUT_PER_1M_MILLICENTS ?? "",
-      // M-OLLAMA-PER-MODEL-MAX-TOKENS (PR #48): forward the per-model output
-      // budget the AILANG adapter sets from models.yml max_output_tokens.
-      // Without this allowlist entry the var is scrubbed and the ollama /v1
-      // path falls back to the 16384 floor — truncating qwen3.6's long
-      // reasoning (finish_reason=length) before the tool call on some turns.
-      AILANG_OLLAMA_MAX_TOKENS: process.env.AILANG_OLLAMA_MAX_TOKENS ?? "",
-      AILANG_OLLAMA_HTTP_TIMEOUT_SEC: process.env.AILANG_OLLAMA_HTTP_TIMEOUT_SEC ?? "",
     };
     // AILANG v0.15.x migration: forward AILANG_STDLIB_PATH if set in the
     // parent env so callers can point the runtime at an upstream stdlib
@@ -442,6 +455,18 @@ export class RuntimeProcess {
     // are migrated and validated by the M9 25/25 provider matrix.
     if (openaiBaseUrl.trim() !== "") childEnv.OPENAI_BASE_URL = openaiBaseUrl;
     if (aiOptionsJson.trim() !== "") childEnv.MOTOKO_AI_OPTIONS_JSON = aiOptionsJson;
+
+    // SYSTEMIC ENV-FORWARD GUARD: auto-forward every config-mapped (CORE_MAP) and
+    // motoko/ailang-namespaced var that wasn't already set explicitly above. This is
+    // what kills the recurring "forgot to add the var to the allowlist → feature silently
+    // off" bug class (SYSTEM_MD, MOTOKO_REPO, MOTOKO_PERSIST_RETRIES, AILANG_OLLAMA_*,
+    // AILANG_STDLIB_PATH …). Explicit entries above win (they carry computed values /
+    // defaults); everything else now reaches the .ail by default instead of vanishing.
+    for (const k of autoForwardedEnvKeys(process.env)) {
+      if (!(k in childEnv) && process.env[k] !== undefined) {
+        childEnv[k] = process.env[k];
+      }
+    }
 
     // M-MOTOKO-EVAL-HARNESS-HARDENING gap #6 (2026-05-08): mirror the
      // requested profile dir from MOTOKO_REPO into <workdir>/.motoko/config
