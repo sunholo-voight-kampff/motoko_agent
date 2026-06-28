@@ -173,11 +173,14 @@ type LoopTotals = {
   -- M-COMPACT-CALIBRATED: chars actually SENT to the provider last call (pinned prefix +
   -- compacted conversation). With last_input_tokens this gives the provider's true chars->token
   -- ratio, used to calibrate the CURRENT-history size estimate that gates compaction.
-  last_sent_chars: int
+  last_sent_chars: int,
+  -- M-MOTOKO-VERIFY-DONE: latched true once the model has AUTHORED a contract/test this run.
+  -- The behavioral done-gate (MOTOKO_REQUIRE_TEST) requires this before accepting "done".
+  behavior_validated: bool
 }
 
 pure func zero_totals() -> LoopTotals {
-  { input_tokens: 0, output_tokens: 0, cache_read: 0, cache_creation: 0, cost_millicents: 0, cost_warned_pct: 0, last_input_tokens: 0, last_sent_chars: 0 }
+  { input_tokens: 0, output_tokens: 0, cache_read: 0, cache_creation: 0, cost_millicents: 0, cost_warned_pct: 0, last_input_tokens: 0, last_sent_chars: 0, behavior_validated: false }
 }
 
 -- Emit a schema-v1 event: prepends schema_version + session_id + type to
@@ -959,30 +962,67 @@ func workspace_has_ail(workdir: string) -> bool ! {Process} {
   }
 }
 
-func run_dp7_verifier(rt: ExtRuntime, workdir: string) -> FinalizeVerification ! {Process} {
+-- M-MOTOKO-VERIFY-DONE: opt-in behavioral done-gate (default OFF; A/B on the rig, then flip the
+-- default — same discipline as MOTOKO_PERSIST_RETRIES). When off, "done" gates on the type-check only.
+func require_behavioral_validation() -> bool ! {Env} {
+  getEnvOr("MOTOKO_REQUIRE_TEST", "0") == "1"
+}
+
+-- M-MOTOKO-VERIFY-DONE: run AFTER the type-check passes. A type check is necessary but NOT sufficient
+-- (a parser returning [] type-checks fine yet is wrong). Require the model to have VALIDATED BEHAVIOR:
+-- (1) it authored a contract/test this run; (2) `ailang verify` holds (exit 1 iff a contract is
+-- violated — the Z3 counterexample is the bug); (3) inline tests pass.
+func behavioral_gate(workdir: string, behavior_validated: bool) -> FinalizeVerification ! {Process} {
+  if not behavior_validated then
+    Reject("Type-check passes, but you've validated only TYPES, not BEHAVIOR — that is exactly why type-correct code can still produce wrong output. Before declaring done, add a property contract to your main function capturing a SPEC INVARIANT (true for every valid input) — e.g. for a parser: `ensures { length(result) > 0 }` (a non-empty document must yield blocks). Then run `ailang verify` and fix any counterexample. (An inline `tests [...]` block also satisfies this.)")
+  else
+    -- `ailang verify` is FILE-only and exit 1 covers both VIOLATION and Z3 ERROR (e.g. a builtin not
+    -- imported), so we iterate files and key on the literal "VIOLATION" — a provably-false contract.
+    -- Un-provable contracts (ERROR) are skipped, not blocked. A contract verifies only on PURE
+    -- functions, so this naturally steers the model to a pure, contractable core + effectful shell.
+    match exec("bash", ["-c", "cd \"$1\" && hit=''; for f in $(find . -name '*.ail' 2>/dev/null); do o=$(ailang verify \"$f\" 2>&1); if echo \"$o\" | grep -q VIOLATION; then echo \"$o\"; hit=1; break; fi; done; [ -z \"$hit\" ]", "_dp7v", workdir]) {
+      Err(_) => Approve,
+      Ok(vo) =>
+        if vo.exitCode != 0 then
+          Reject("A contract you wrote does not hold:\n\n${toString(vo.stdout)}\n\nThis is a real behavior bug the type-checker cannot see. Fix the implementation (or correct the contract) until `ailang verify` passes.")
+        else
+          match exec("bash", ["-c", "cd \"$1\" && ailang test . 2>&1", "_dp7t", workdir]) {
+            Err(_) => Approve,
+            Ok(to) => {
+              let o = toString(to.stdout);
+              if contains(o, "tests:") && not contains(o, ", 0 failed") then
+                Reject("A test you wrote is failing:\n\n${o}\n\nFix the implementation until `ailang test` passes.")
+              else Approve
+            }
+          }
+    }
+}
+
+func run_dp7_verifier(rt: ExtRuntime, workdir: string, behavior_validated: bool) -> FinalizeVerification ! {Process, Env} {
   if not rt.verification.enabled then Approve
   else {
-    -- AILANG definition-of-done: when verification is on, an AILANG project (.ail files present) is gated by a
-    -- TYPE-CHECK (`ailang check .`) — AILANG's core guarantee, so the agent cannot declare "done" with code that
-    -- doesn't type-check. Non-AILANG projects fall back to the configured build/test command. (Per the user:
-    -- default to a type-check, but only for .ail.)
-    let cmd = if workspace_has_ail(workdir) then "ailang check ." else rt.verification.command;
+    -- AILANG definition-of-done: an AILANG project (.ail present) is gated by a TYPE-CHECK
+    -- (`ailang check .`). With MOTOKO_REQUIRE_TEST=1 it is ALSO gated on behavioral validation
+    -- (behavioral_gate) — types are necessary but not sufficient. Non-AILANG: configured command.
+    let is_ail = workspace_has_ail(workdir);
+    let cmd = if is_ail then "ailang check ." else rt.verification.command;
     match exec("bash", ["-c", "cd \"$1\" && ${cmd} 2>&1", "_dp7", workdir]) {
       Err(_) => Approve,
       Ok(out) => {
-        if out.exitCode == 0 then Approve
-        else {
+        if out.exitCode != 0 then {
           let output = toString(out.stdout);
           if is_missing_infrastructure(output) then Approve
           else Reject(output)
         }
+        else if is_ail && require_behavioral_validation() then behavioral_gate(workdir, behavior_validated)
+        else Approve
       }
     }
   }
 }
 
-func dp7_gate(rt: ExtRuntime, workdir: string, step_idx: int, session_id: string) -> Option[Message] ! {Process, IO, Trace} {
-  match run_dp7_verifier(rt, workdir) {
+func dp7_gate(rt: ExtRuntime, workdir: string, step_idx: int, session_id: string, behavior_validated: bool) -> Option[Message] ! {Process, IO, Trace, Env} {
+  match run_dp7_verifier(rt, workdir, behavior_validated) {
     Approve => None,
     Reject(errors) => {
       let _ = emit_event(session_id, "dp7_verifier_rejected", [
@@ -991,7 +1031,7 @@ func dp7_gate(rt: ExtRuntime, workdir: string, step_idx: int, session_id: string
       ]);
       Some({
         role: "user",
-        content: "The code you just wrote does not type-check. Fix all errors before declaring done:\n\n${errors}",
+        content: "Not done yet — resolve the following before declaring done:\n\n${errors}",
         tool_calls: [],
         tool_call_id: ""
       })
@@ -1036,6 +1076,20 @@ func tool_calls_have_writefile(calls: [ToolCall]) -> bool {
   match calls {
     [] => false,
     c :: rest => if c.name == "WriteFile" then true else tool_calls_have_writefile(rest)
+  }
+}
+
+-- M-MOTOKO-VERIFY-DONE: true if any tool call this step AUTHORED a contract/test (requires/ensures/
+-- tests). We scan tool-call ARGUMENTS — where written content lives — so reads (no content in args)
+-- never trigger it; this cleanly distinguishes the model authoring validation from contracts that
+-- merely exist in provided dependency files. Used to gate "done" on behavioral validation, not types.
+func step_wrote_validation(calls: [ToolCall]) -> bool {
+  match calls {
+    [] => false,
+    c :: rest =>
+      if contains(c.arguments, "ensures {") || contains(c.arguments, "requires {") || contains(c.arguments, "tests [")
+      then true
+      else step_wrote_validation(rest)
   }
 }
 
@@ -1283,7 +1337,9 @@ func loop_v2(
           -- M-COMPACT-CALIBRATED: chars of the call we just sent (pinned prefix + compacted
           -- conversation). With last_input_tokens this is the provider's true chars->token ratio,
           -- used next step to size the current history accurately and gate compaction.
-          last_sent_chars: message_chars(compacted_msgs)
+          last_sent_chars: message_chars(compacted_msgs),
+          -- M-MOTOKO-VERIFY-DONE: latch true once the model authors a contract/test this run.
+          behavior_validated: totals.behavior_validated || step_wrote_validation(result.tool_calls)
         };
 
         -- M3 DP1a: response-intercept hook. Extensions can synthesize a
@@ -1372,7 +1428,7 @@ func loop_v2(
               --   NoDecision               => emit done with the model's own content
               match dispatch_solver_candidate(rt, ctx, result.message.content) {
                 Accept(output) => {
-                  match dp7_gate(rt, workdir, step_idx, session_id) {
+                  match dp7_gate(rt, workdir, step_idx, session_id, new_totals.behavior_validated) {
                     None => {
                       -- IMPORTANT: emit run_summary BEFORE done. The TS TUI
                       -- layer (src/tui/src/index.ts) calls process.exit(0)
@@ -1449,7 +1505,7 @@ func loop_v2(
                       let next_msgs = msgs_with_assistant ++ [nudge_msg];
                       loop_v2(rt, task, env_url, hybrid_tools, budget, model, next_msgs, workdir, step_idx + 1, step_budget - 1, ohmy_pi, max_cost_millicents, cost_rates, new_totals, next_provider, session_id, started_at_ms)
                     } else {
-                      match dp7_gate(rt, workdir, step_idx, session_id) {
+                      match dp7_gate(rt, workdir, step_idx, session_id, new_totals.behavior_validated) {
                         None => {
                           -- IMPORTANT: run_summary BEFORE done — see Accept branch
                           -- above for rationale (TS TUI's process.exit(0) on done
