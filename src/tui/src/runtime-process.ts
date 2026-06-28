@@ -355,6 +355,10 @@ export class RuntimeProcess {
       // explicit env allowlist scrubs it and the feature is silently off —
       // same gotcha as MOTOKO_REPO / the pricing vars below. Empty = off.
       MOTOKO_PERSIST_RETRIES: process.env.MOTOKO_PERSIST_RETRIES ?? "",
+      // M-MOTOKO-VERIFY-DONE: forward the behavioral done-gate opt-in so
+      // agent_loop_v2.ail's run_dp7_verifier can read it. Same allowlist gotcha
+      // as MOTOKO_PERSIST_RETRIES — without this the gate is silently off. Empty = off.
+      MOTOKO_REQUIRE_TEST: process.env.MOTOKO_REQUIRE_TEST ?? "",
       // M-MOTOKO-EVAL-HARNESS-HARDENING gap #6 (2026-05-08): forward
       // MOTOKO_REPO so the AILANG runtime can fall back to the fork's
       // bundled profile (.motoko/config/<profile>) when WORKDIR is a
