@@ -425,15 +425,10 @@ pure func resolve_workdir_path_handles_under_wd_abs() -> bool
       && resolve_workdir_path("/tmp/wd/", "src/foo.ail")      == "/tmp/wd/src/foo.ail"
   }
 
--- env_via_sh reads an env var through the Process effect (already in this handler's effect
--- row), so the AST auto-read gate needs no Env effect or signature changes. Bare $VAR is a
--- literal in AILANG strings (only ${..} interpolates), so sh does the expansion.
-func env_via_sh(shell_expr: string) -> string ! {Process} {
-  match exec("sh", ["-c", shell_expr]) {
-    Ok(out) => if out.exitCode == 0 then trim(toString(out.stdout)) else "",
-    Err(_) => ""
-  }
-}
+-- (env_via_sh removed — M-ENV-FORWARD-UNIFY) Read env via getEnvOr, NEVER by shelling out:
+-- AILANG's deterministic exec does NOT forward MOTOKO_*/AILANG_* to an sh subprocess, so an
+-- `exec("sh", ["-c", "...$MOTOKO_X..."])` env probe always reads "" (the silent-feature-off bug
+-- that hit MOTOKO_AST_AUTOREAD). getEnvOr reads the runtime's own process.env directly.
 
 -- True if any non-empty entry of `parts` is a substring of `hay` (path-suffix allowlist).
 func any_substr_match(parts: [string], hay: string) -> bool {

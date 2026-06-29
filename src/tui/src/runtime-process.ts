@@ -328,6 +328,21 @@ export class RuntimeProcess {
       GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
       EXA_API_KEY: process.env.EXA_API_KEY,
       CLICKSTACK_INGESTION_KEY: process.env.CLICKSTACK_INGESTION_KEY,
+      // ── SAFETY NET (M-ENV-FORWARD-UNIFY) ─────────────────────────────────────
+      // Auto-forward every MOTOKO_*/AILANG_*/SYSTEM_MD/CORE_MAP var that is set, via
+      // autoForwardedEnvKeys — the SINGLE source of truth (also asserted by the
+      // env-forward drift-guard test, and already used for the spawn at L469). This
+      // hand-maintained childEnv list silently dropped SYSTEM_MD, MOTOKO_PERSIST_RETRIES,
+      // MOTOKO_REQUIRE_TEST, MOTOKO_AST_AUTOREAD and AILANG_OLLAMA_MAX_TOKENS (twice) —
+      // each a "feature silently off" bug found hours/days later. With this spread a NEW
+      // env-gated feature reaches the core WITHOUT being hand-added below; the explicit
+      // entries that follow remain ONLY for computed values / non-empty defaults (they
+      // are declared after the spread, so they still win for those specific keys).
+      ...Object.fromEntries(
+        autoForwardedEnvKeys(process.env).map(
+          (k): [string, string | undefined] => [k, process.env[k]],
+        ),
+      ),
       // SYSTEM_MD — path to the system-prompt file (for AILANG tasks, the language
       // reference). rpc.ail reads it via getEnvOr("SYSTEM_MD"). Without forwarding it
       // here the explicit allowlist scrubs it (same gotcha as MOTOKO_PERSIST_RETRIES /

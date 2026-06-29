@@ -3,10 +3,13 @@ import { autoForwardedEnvKeys } from "./runtime-process.js";
 import { CORE_MAP, EXTENSION_MAPS } from "./config.js";
 
 // Drift-guard for the recurring "env var scrubbed by the childEnv allowlist → feature
-// silently off" bug (hit 5×: SYSTEM_MD, MOTOKO_REPO, MOTOKO_PERSIST_RETRIES,
-// AILANG_OLLAMA_MAX_TOKENS, AILANG_STDLIB_PATH). The allowlist must be DERIVED from the
-// config maps + the motoko/ailang namespaces, never hand-maintained as a second source of
-// truth. These tests fail loudly if forwarding ever stops covering a config-mapped var.
+// silently off" bug (hit 7×: SYSTEM_MD, MOTOKO_REPO, MOTOKO_PERSIST_RETRIES, MOTOKO_REQUIRE_TEST,
+// MOTOKO_AST_AUTOREAD, AILANG_OLLAMA_MAX_TOKENS, AILANG_STDLIB_PATH). Root cause: the childEnv
+// allowlist was a SECOND, hand-maintained source of truth that drifted from this function — and
+// these tests passed while childEnv silently ignored the function. M-ENV-FORWARD-UNIFY fixes that:
+// childEnv now SPREADS autoForwardedEnvKeys(process.env), so a new env-gated var reaches the core
+// with NO hand-edit. These tests fail loudly if forwarding ever stops covering a config-mapped or
+// MOTOKO_*/AILANG_*-namespaced var.
 describe("autoForwardedEnvKeys — env-forward drift guard", () => {
   it("forwards every CORE_MAP env var (incl. SYSTEM_MD)", () => {
     const keys = new Set(autoForwardedEnvKeys({}));
