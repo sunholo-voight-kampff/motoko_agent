@@ -970,21 +970,27 @@ func require_behavioral_validation() -> bool ! {Env} {
 
 -- M-MOTOKO-VERIFY-DONE: run AFTER the type-check passes. A type check is necessary but NOT sufficient
 -- (a parser returning [] type-checks fine yet is wrong). Require the model to have VALIDATED BEHAVIOR:
--- (1) it authored a contract/test this run; (2) `ailang verify` holds (exit 1 iff a contract is
--- violated — the Z3 counterexample is the bug); (3) inline tests pass.
+-- (1) it authored a contract/test this run; (2) `ailang ai-check` (the unified check+verify JSON)
+-- shows every contract verified — no "counterexample" (a provably-false contract) and no "error" (an
+-- unverifiable one, usually a builtin used in the contract but not imported); (3) inline tests pass.
 func behavioral_gate(workdir: string, behavior_validated: bool) -> FinalizeVerification ! {Process} {
   if not behavior_validated then
     Reject("Type-check passes, but you've validated only TYPES, not BEHAVIOR — that is exactly why type-correct code can still produce wrong output. Before declaring done, add a property contract to your main function capturing a SPEC INVARIANT (true for every valid input) — e.g. for a parser: `ensures { length(result) > 0 }` (a non-empty document must yield blocks). Then run `ailang verify` and fix any counterexample. (An inline `tests [...]` block also satisfies this.)")
   else
-    -- `ailang verify` is FILE-only and exit 1 covers both VIOLATION and Z3 ERROR (e.g. a builtin not
-    -- imported), so we iterate files and key on the literal "VIOLATION" — a provably-false contract.
-    -- Un-provable contracts (ERROR) are skipped, not blocked. A contract verifies only on PURE
-    -- functions, so this naturally steers the model to a pure, contractable core + effectful shell.
-    match exec("bash", ["-c", "cd \"$1\" && hit=''; for f in $(find . -name '*.ail' 2>/dev/null); do o=$(ailang verify \"$f\" 2>&1); if echo \"$o\" | grep -q VIOLATION; then echo \"$o\"; hit=1; break; fi; done; [ -z \"$hit\" ]", "_dp7v", workdir]) {
+    -- `ailang ai-check` is the unified check+verify JSON (FILE-only), so we iterate files and key on
+    -- the per-result `status`: "counterexample" = a provably-FALSE contract (a real bug, exit 2);
+    -- "error" = a contract that could not be verified (usually a builtin used in the contract but not
+    -- imported, exit 3). The old grep-"VIOLATION" path silently APPROVED the latter (Z3 ERROR), so e.g.
+    -- `ensures { length(result) > 0 }` without `import std/list (length)` slipped the gate. We now reject
+    -- both with distinct coaching. A contract verifies only on PURE functions, so this still steers the
+    -- model to a pure, contractable core + effectful shell.
+    match exec("bash", ["-c", "cd \"$1\" || exit 0; for f in $(find . -name '*.ail' 2>/dev/null); do o=$(ailang ai-check \"$f\" 2>&1); if echo \"$o\" | grep -q '\"status\": \"counterexample\"'; then echo \"$o\"; exit 2; fi; if echo \"$o\" | grep -q '\"status\": \"error\"'; then echo \"$o\"; exit 3; fi; done; exit 0", "_dp7v", workdir]) {
       Err(_) => Approve,
       Ok(vo) =>
-        if vo.exitCode != 0 then
-          Reject("A contract you wrote does not hold:\n\n${toString(vo.stdout)}\n\nThis is a real behavior bug the type-checker cannot see. Fix the implementation (or correct the contract) until `ailang verify` passes.")
+        if vo.exitCode == 2 then
+          Reject("A contract you wrote is provably FALSE — Z3 found a counterexample (a real behavior bug the type-checker cannot see):\n\n${toString(vo.stdout)}\n\nFix the implementation (or correct the contract) until `ailang ai-check` shows it verified.")
+        else if vo.exitCode == 3 then
+          Reject("A contract you wrote could not be verified — usually a builtin used in the contract is not imported (e.g. `length` needs `import std/list (length)` at the top of the file). Z3 reported:\n\n${toString(vo.stdout)}\n\nImport the builtin (or fix the contract) so it actually verifies, then declare done.")
         else
           match exec("bash", ["-c", "cd \"$1\" && ailang test . 2>&1", "_dp7t", workdir]) {
             Err(_) => Approve,
