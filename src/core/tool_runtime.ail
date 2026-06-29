@@ -2,7 +2,7 @@ module src/core/tool_runtime
 
 import std/option  (Option, Some, None)
 import std/result  (Result, Ok, Err)
-import std/string  (split, contains, trim, length, startsWith, endsWith, substring, find)
+import std/string  (split, contains, trim, length, startsWith, endsWith, substring, find, join)
 import std/list    (reverse)
 import std/json    (Json, jo, get, asString, asNumber, asBool, asArray)
 import std/fs      (readFile, writeFile, fileExists, mkdirAll, isDir, readFileResult, writeFileResult, mkdirAllResult)
@@ -795,6 +795,71 @@ func first_changed_line_rec(before_lines: [string], after_lines: [string], line_
   }
 }
 
+-- M-EDIT-WS-TOLERANT (it's the harness, not the model): AILANG is NOT whitespace-sensitive
+-- (braces + explicit syntax, never indentation), so EditFile's byte-exact `old` match is pure
+-- harness friction — a local model cannot echo exact indentation across two tool calls, so its
+-- surgical edits hit 0 occurrences and it is FORCED to rewrite the whole file (the docx 61-rewrite
+-- max_steps loop). When the exact match fails we retry on per-line-TRIMMED content, require a
+-- UNIQUE match, then replace those original lines with `new`. Indentation is cosmetic in AILANG so
+-- this never changes meaning; exact matches are untouched (zero behaviour change for working edits).
+pure func ws_list_len(xs: [string]) -> int { match xs { [] => 0, _ :: t => 1 + ws_list_len(t) } }
+
+pure func ws_concat(a: [string], b: [string]) -> [string] { match a { [] => b, h :: t => (h :: ws_concat(t, b)) } }
+
+pure func ws_take(xs: [string], n: int) -> [string] { if n <= 0 then [] else match xs { [] => [], h :: t => (h :: ws_take(t, n - 1)) } }
+
+pure func ws_drop(xs: [string], n: int) -> [string] { if n <= 0 then xs else match xs { [] => [], _ :: t => ws_drop(t, n - 1) } }
+
+pure func ws_trim_each(xs: [string]) -> [string] { match xs { [] => [], h :: t => (trim(h) :: ws_trim_each(t)) } }
+
+pure func ws_drop_leading_empty(xs: [string]) -> [string] { match xs { [] => [], h :: t => if trim(h) == "" then ws_drop_leading_empty(t) else xs } }
+
+pure func ws_drop_trailing_empty(xs: [string]) -> [string] { reverse(ws_drop_leading_empty(reverse(xs))) }
+
+-- does the prefix of file_lines (each trimmed) equal old_trim line-for-line?
+pure func ws_window_eq(file_lines: [string], old_trim: [string]) -> bool {
+  match old_trim {
+    [] => true,
+    oh :: ot => match file_lines { [] => false, fh :: ft => if trim(fh) == oh then ws_window_eq(ft, ot) else false }
+  }
+}
+
+-- scan every starting line; return the first matching index (-1 if none) and the match count.
+pure func ws_find(file_lines: [string], old_trim: [string], i: int, first: int, count: int) -> { idx: int, count: int } {
+  match file_lines {
+    [] => { idx: first, count: count },
+    _ :: t => {
+      let hit = ws_window_eq(file_lines, old_trim);
+      let nf = if hit && count == 0 then i else first;
+      let nc = if hit then count + 1 else count;
+      ws_find(t, old_trim, i + 1, nf, nc)
+    }
+  }
+}
+
+pure func apply_edit_ws_tolerant(text: string, old: string, new: string) -> Result[string, string] {
+  let ot = ws_drop_trailing_empty(ws_trim_each(split(old, "\n")));
+  if ws_list_len(ot) == 0 then Err("matched 0 occurrences")
+  else {
+    let fl = split(text, "\n");
+    let w = ws_find(fl, ot, 0, -1, 0);
+    if w.count == 1 then
+      Ok(join("\n", ws_concat(ws_concat(ws_take(fl, w.idx), split(new, "\n")), ws_drop(fl, w.idx + ws_list_len(ot)))))
+    else if w.count == 0 then Err("matched 0 occurrences (exact and whitespace-tolerant)")
+    else Err("matched multiple occurrences (whitespace-tolerant); make the edit more specific")
+  }
+}
+
+pure func test_ws_tolerant_edit_ignores_indentation() -> bool
+  tests [((), true)]
+  {
+    let file = "module x\n    let v = 1\n    v";
+    match apply_edit_ws_tolerant(file, "let v = 1", "let v = 2") {
+      Ok(out) => contains(out, "let v = 2") && not contains(out, "let v = 1"),
+      Err(_) => false
+    }
+  }
+
 func apply_edits(text: string, edits: [EditOp], idx: int) -> Result[{ content: string, applied: int }, string] {
   match edits {
     [] => Ok({ content: text, applied: idx - 1 }),
@@ -802,7 +867,11 @@ func apply_edits(text: string, edits: [EditOp], idx: int) -> Result[{ content: s
       if e.old == "" then Err("edit #${show(idx)} old must be non-empty")
       else {
         let matches = count_occurrences(text, e.old, 0);
-        if matches == 0 then Err("edit #${show(idx)} matched 0 occurrences")
+        if matches == 0 then
+          match apply_edit_ws_tolerant(text, e.old, e.new) {
+            Ok(nt) => apply_edits(nt, rest, idx + 1),
+            Err(why) => Err("edit #${show(idx)} ${why}")
+          }
         else if not e.replace_all && matches > 1 then Err("edit #${show(idx)} matched multiple occurrences; set replace_all=true")
         else {
           let next_text =
