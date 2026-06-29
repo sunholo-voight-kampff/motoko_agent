@@ -460,7 +460,8 @@ func read_full_file(id: string, path: string, resolved: string, start: int, end:
   }
 }
 
--- AST AUTO-READ (gated, default off). When MOTOKO_AST_AUTOREAD is set, ReadFile on a
+-- AST AUTO-READ (M-ENV-FORWARD-UNIFY: default ON for dev, opt-out via MOTOKO_AST_AUTOREAD=0).
+-- When enabled, ReadFile on a
 -- *dependency* .ail module returns its compact AST interface (ailang iface --compact) instead
 -- of full source: the docx trace showed the model re-reading sibling parsers as full files
 -- 12x/8x when it only needed their API. Paths matching a MOTOKO_AST_READ_FULL entry (the edit
@@ -476,9 +477,10 @@ func run_read_file(id: string, path: string, start: int, end: int, workdir: stri
       -- the sh subprocess, so the old env_via_sh path always saw "" and autoread stayed silently
       -- off in every host that sets these via childEnv (eval-suite, run.sh). getEnvOr reads
       -- process.env, where the childEnv forward (runtime-process.ts) actually puts them.
-      let autoread = if is_ail then getEnvOr("MOTOKO_AST_AUTOREAD", "") else "";
+      -- Default ON for dev (opt-out, like MOTOKO_RETRY_*); MOTOKO_AST_AUTOREAD=0 disables it.
+      let autoread = if is_ail then getEnvOr("MOTOKO_AST_AUTOREAD", "1") else "";
       let route_iface =
-        if autoread == "" then false
+        if autoread == "" || autoread == "0" then false
         else not any_substr_match(split(getEnvOr("MOTOKO_AST_READ_FULL", ""), ":"), resolved);
       if route_iface then {
         match exec("ailang", ["iface", "--compact", resolved]) {
