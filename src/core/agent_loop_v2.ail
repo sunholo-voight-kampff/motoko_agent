@@ -1147,6 +1147,23 @@ func loop_v2(
   session_id: string,
   started_at_ms: int
 ) -> Result[[Message], AIError] ! {AI, FS, Process, IO, Env, Net, SharedMem, Clock, Stream, Trace} {
+  -- M-ENV-FORWARD-UNIFY phase 2: broadcast the RESOLVED env-gated config ONCE at step 0 so the
+  -- active feature flags are visible at the start of every run — no more discovering a silently-off
+  -- (or unexpectedly-on) feature hours later. Mirrors system_prompt_built; queryable in the session
+  -- JSONL / `ailang chains`. The values reflect the SAME getEnvOr defaults the features actually use.
+  let _ = if step_idx == 0 then
+    emit_event(session_id, "runtime_config_resolved", [
+      kv("model", js(model)),
+      kv("step_budget", jnum(_int_to_float(step_budget))),
+      kv("ast_autoread", js(getEnvOr("MOTOKO_AST_AUTOREAD", "1"))),
+      kv("require_test", js(getEnvOr("MOTOKO_REQUIRE_TEST", "0"))),
+      kv("persist_retries", js(getEnvOr("MOTOKO_PERSIST_RETRIES", "0"))),
+      kv("continue_on_truncation", js(getEnvOr("MOTOKO_CONTINUE_ON_TRUNCATION", "1"))),
+      kv("retry_empty", js(getEnvOr("MOTOKO_RETRY_EMPTY", "1"))),
+      kv("retry_stream_error", js(getEnvOr("MOTOKO_RETRY_STREAM_ERROR", "1"))),
+      kv("system_md", js(if getEnvOr("SYSTEM_MD", "") == "" then "unset" else "set"))
+    ])
+    else ();
   if step_budget <= 0 then {
     let _ = emit_run_summary(session_id, model, totals, step_idx, 4, "v2 loop: step budget exhausted", started_at_ms);
     Err({
