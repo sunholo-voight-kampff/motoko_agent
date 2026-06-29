@@ -308,7 +308,7 @@ func load_agent(core: Json) -> AgentConfig {
   {
     model: json_string(a, "model", "anthropic/claude-sonnet-4-6"),
     workdir: json_string(a, "workdir", "."),
-    max_steps: json_int(a, "max_steps", 50),
+    max_steps: json_int(a, "max_steps", 120),
     step_delay_ms: json_int(a, "step_delay_ms", 0),
     max_retries: json_int(a, "max_retries", 3),
     retry_base_ms: json_int(a, "retry_base_ms", 1000),
