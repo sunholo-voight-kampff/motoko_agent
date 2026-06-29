@@ -7,6 +7,7 @@ import std/list    (reverse)
 import std/json    (Json, jo, get, asString, asNumber, asBool, asArray)
 import std/fs      (readFile, writeFile, fileExists, mkdirAll, isDir, readFileResult, writeFileResult, mkdirAllResult)
 import std/process (exec, ProcessError, ProcessOutput)
+import std/env     (getEnvOr)
 import std/bytes   (toString)
 import std/crypto  (sha256Hex)
 import src/core/types   (ToolBackend, ProcessExecReq, ToolResultItem, ToolResultMeta, SearchMatch, TestFailure, EditOp)
@@ -469,16 +470,21 @@ func read_full_file(id: string, path: string, resolved: string, start: int, end:
 -- of full source: the docx trace showed the model re-reading sibling parsers as full files
 -- 12x/8x when it only needed their API. Paths matching a MOTOKO_AST_READ_FULL entry (the edit
 -- target) keep full source; iface failure falls back to a full read.
-func run_read_file(id: string, path: string, start: int, end: int, workdir: string) -> ToolResultItem ! {FS, Process} {
+func run_read_file(id: string, path: string, start: int, end: int, workdir: string) -> ToolResultItem ! {FS, Process, Env} {
   match validate_path_common("ReadFile", id, path, workdir) {
     Err(e) => e,
     Ok(_) => {
       let resolved = resolve_workdir_path(workdir, path);
       let is_ail = endsWith(resolved, ".ail");
-      let autoread = if is_ail then env_via_sh("printf %s \"$MOTOKO_AST_AUTOREAD\"") else "";
+      -- Read the gate env vars DIRECTLY from the runtime's own env (getEnvOr) rather than
+      -- shelling out (env_via_sh): AILANG's deterministic exec does NOT forward MOTOKO_* vars to
+      -- the sh subprocess, so the old env_via_sh path always saw "" and autoread stayed silently
+      -- off in every host that sets these via childEnv (eval-suite, run.sh). getEnvOr reads
+      -- process.env, where the childEnv forward (runtime-process.ts) actually puts them.
+      let autoread = if is_ail then getEnvOr("MOTOKO_AST_AUTOREAD", "") else "";
       let route_iface =
         if autoread == "" then false
-        else not any_substr_match(split(env_via_sh("printf %s \"$MOTOKO_AST_READ_FULL\""), ":"), resolved);
+        else not any_substr_match(split(getEnvOr("MOTOKO_AST_READ_FULL", ""), ":"), resolved);
       if route_iface then {
         match exec("ailang", ["iface", "--compact", resolved]) {
           Err(_) => read_full_file(id, path, resolved, start, end),
