@@ -483,7 +483,14 @@ func run_read_file(id: string, path: string, start: int, end: int, workdir: stri
         if autoread == "" || autoread == "0" then false
         else not any_substr_match(split(getEnvOr("MOTOKO_AST_READ_FULL", ""), ":"), resolved);
       if route_iface then {
-        match exec("ailang", ["iface", "--compact", resolved]) {
+        -- Pass the workspace-RELATIVE path: the executor runs motoko with cwd=workspace
+        -- (motoko.go cmd.Dir), so `ailang iface` derives the CLEAN canonical module name
+        -- (e.g. "benchmark/solution"). Passing the ABSOLUTE path made ailang name the module by
+        -- the abs path (or raise MOD010) -> the model copied malformed module names into its own
+        -- imports -> "module loading error: failed to load". Fall back to abs if un-relativizable.
+        let iface_rel = strip_workdir_prefix(workdir, resolved);
+        let iface_path = if workdir == "" || workdir == "." || is_absolute_path(iface_rel) then resolved else iface_rel;
+        match exec("ailang", ["iface", "--compact", iface_path]) {
           Err(_) => read_full_file(id, path, resolved, start, end),
           Ok(out) => {
             if out.exitCode == 0 then {
@@ -491,7 +498,7 @@ func run_read_file(id: string, path: string, start: int, end: int, workdir: stri
               ReadFileResult({
                 id: id,
                 path: path,
-                content: "-- [AST auto-read] compact interface for dependency module ${path}; use BashExec cat to see the full implementation if needed.\n${body}",
+                content: "-- [AST auto-read] compact interface for dependency module ${iface_path}; use BashExec cat to see the full implementation if needed.\n${body}",
                 line_count: 0,
                 truncated: true,
                 sha256: ""
