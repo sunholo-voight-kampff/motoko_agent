@@ -1611,6 +1611,18 @@ func loop_v2(
 --
 -- step_budget defaults to 8 if caller passes <= 0 (mirrors upstream
 -- runTools' typical default).
+
+-- M-MAX-STEPS-CAP: a benchmark can LOWER the agent step budget via MOTOKO_MAX_STEPS (set per-bench in
+-- agent_env, e.g. docx_reimplement=60). Converged runs finish well under the 120 default, so a 60 cap
+-- ends a LOOPING run fast with finish_reason=max_steps — a clear "did not converge / broken" signal —
+-- instead of slogging to step 120 / the 3h wall-clock. Only LOWERS the budget: a value >= s is ignored.
+func cap_steps_by_env(s: int) -> int ! {Env} {
+  match _stringToInt(trim(getEnvOr("MOTOKO_MAX_STEPS", ""))) {
+    Some(m) => if m > 0 && m < s then m else s,
+    None => s
+  }
+}
+
 export func run_v2(
   rt: ExtRuntime,
   task: string,
@@ -1626,7 +1638,7 @@ export func run_v2(
   cost_rates: CostRates,
   provider: StepProvider
 ) -> Result[[Message], AIError] ! {AI, FS, Process, IO, Env, Net, SharedMem, Clock, Stream, Trace} {
-  let budget_steps = if step_budget <= 0 then 8 else step_budget;
+  let budget_steps = cap_steps_by_env(if step_budget <= 0 then 8 else step_budget);
 	  let messages = msgs_to_messages(initial_msgs);
 	  let resolved_model = strip_provider_prefix(model);
 	  let session_id = derive_session_id();
@@ -1657,7 +1669,7 @@ export func run_v2_from_messages(
   cost_rates: CostRates,
   provider: StepProvider
 ) -> Result[[Message], AIError] ! {AI, FS, Process, IO, Env, Net, SharedMem, Clock, Stream, Trace} {
-  let budget_steps = if step_budget <= 0 then 8 else step_budget;
+  let budget_steps = cap_steps_by_env(if step_budget <= 0 then 8 else step_budget);
 	  let resolved_model = strip_provider_prefix(model);
 	  let session_id = derive_session_id();
 	  let started_at_ms = now();
@@ -1828,7 +1840,7 @@ export func run_v2_with_stub(
   cost_rates: CostRates,
   script: [ScriptedStep]
 ) -> Result[[Message], AIError] ! {AI, FS, Process, IO, Env, Net, SharedMem, Clock, Stream, Trace} {
-	  let budget_steps = if step_budget <= 0 then 8 else step_budget;
+	  let budget_steps = cap_steps_by_env(if step_budget <= 0 then 8 else step_budget);
 	  let session_id = derive_session_id();
 	  let started_at_ms = now();
 	  let session_span = "motoko.session.${session_id}";
