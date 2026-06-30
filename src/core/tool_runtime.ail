@@ -353,6 +353,23 @@ pure func strip_under_workdir() -> bool
       && strip_workdir_prefix("/tmp/foo", "src/main.ail")       == "src/main.ail"
   }
 
+-- realpath_both canonicalizes workdir + path (realpath -m resolves symlinks/.. and is OK with
+-- non-existent files) so an absolute path that differs only in formatting (e.g. /var vs the macOS
+-- /private/var symlink) can still be matched against the workdir. Returns Err on realpath failure.
+-- Used by validate_path_common (M-TOOL-RELIABILITY) so the structured tools accept the same
+-- absolute paths ReadFile/bash hand the model, instead of brittle string-rejecting them.
+func realpath_both(workdir: string, path: string) -> Result[{ wd: string, p: string }, ()] ! {Process} {
+  let script = "python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1])); print(os.path.realpath(sys.argv[2]))' \"$1\" \"$2\"";
+  match exec("bash", ["-lc", script, "motoko-realpath", workdir, path]) {
+    Ok(out) =>
+      match split(trim(toString(out.stdout)), "\n") {
+        wd :: p :: _ => Ok({ wd: trim(wd), p: trim(p) }),
+        _ => Err(())
+      },
+    Err(_) => Err(())
+  }
+}
+
 func validate_path_common(tool: string, id: string, path: string, workdir: string) -> Result[(), ToolResultItem] ! {Process} {
   if path == "" then Err(path_error(id, tool, "missing path"))
   else {
@@ -361,8 +378,20 @@ func validate_path_common(tool: string, id: string, path: string, workdir: strin
     -- only if path was either already relative, or was an absolute path that
     -- lived under WORKDIR. Plain-absolute paths outside WORKDIR fall through
     -- and get rejected by the is_absolute_path check below as before.
-    let stripped = strip_workdir_prefix(workdir, path);
-    if is_absolute_path(stripped) then Err(path_error(id, tool, "absolute paths are not allowed: ${path}"))
+    -- M-TOOL-RELIABILITY: ReadFile/bash hand the model ABSOLUTE paths; the string-strip above is
+    -- brittle (/var vs the /private/var symlink, trailing slash) so the path stayed absolute and we
+    -- rejected here BEFORE the realpath guard ran -> the model fell back to bash 'cat >' (which
+    -- accepts abs paths) — the docx rewrite loop. Now: if string-strip leaves it absolute,
+    -- realpath-normalize both + re-strip; reject only if genuinely OUTSIDE the workspace. The
+    -- guard_script below stays the security backstop.
+    let stripped_raw = strip_workdir_prefix(workdir, path);
+    let stripped = if is_absolute_path(stripped_raw) then
+        match realpath_both(workdir, stripped_raw) {
+          Ok(rp) => strip_workdir_prefix(rp.wd, rp.p),
+          Err(_) => stripped_raw
+        }
+      else stripped_raw;
+    if is_absolute_path(stripped) then Err(path_error(id, tool, "absolute path outside workspace: ${path}"))
     else if has_parent_traversal_segment(stripped) then Err(path_error(id, tool, "path traversal is not allowed: ${path}"))
     else {
       -- Detect when model emits an absolute path without the leading "/" (e.g.
