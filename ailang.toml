@@ -21,6 +21,7 @@ ailang = ">=0.30.0"
 "sunholo/motoko_ext_microrag" = "0.4.2"
 "sunholo/motoko_ext_compaction_ai" = "0.3.1"
 "sunholo/motoko_ext_ailang_docs" = "0.1.4"
+"sunholo/motoko_ext_fmt" = "0.1.0"
 "sunholo/motoko_ext_scratchpad" = { path = "packages/motoko_scratchpad" }
 
 [extensions]
@@ -36,6 +37,7 @@ packages      = [
   "sunholo/motoko_ext_decision_framework@0.2.2",
   "sunholo/motoko_ext_microrag@0.4.2",
   "sunholo/motoko_ext_compaction_ai@0.3.1",
+  "sunholo/motoko_ext_fmt@0.1.0",
   "sunholo/motoko_ext_scratchpad@0.1.0",
 ]
 config_import   = "src/core/config.RuntimeConfig"

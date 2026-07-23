@@ -1,7 +1,7 @@
 {
-  "ailang_version": "v0.30.0-40-ge2017f672-dirty",
-  "generated_at": "2026-07-20T10:49:34.14534Z",
-  "generator": "ailang lock v0.30.0-40-ge2017f672-dirty",
+  "ailang_version": "v0.30.0-126-g82084c1a9",
+  "generated_at": "2026-07-23T18:52:35.820645Z",
+  "generator": "ailang lock v0.30.0-126-g82084c1a9",
   "packages": [
     {
       "ailang": ">=0.9.2",
@@ -205,6 +205,28 @@
       "name": "sunholo/motoko_ext_exa_search",
       "source": "registry",
       "version": "0.2.7"
+    },
+    {
+      "ailang": ">=0.17.0",
+      "content_hash": "sha256:5c282836286b8e96c3e6c91afda4b183e42bb73337ca3a51de8a5eb59d0e7cf3",
+      "effects": [
+        "AI",
+        "Clock",
+        "Env",
+        "FS",
+        "IO",
+        "Net",
+        "Process",
+        "SharedMem",
+        "Stream"
+      ],
+      "exports": [
+        "sunholo/motoko_ext_fmt/register"
+      ],
+      "interface_hash": "sha256:da692e762544ec15bff8a8fcc71b33c64859d010efbe9a592ee87daefbad57f6",
+      "name": "sunholo/motoko_ext_fmt",
+      "source": "registry",
+      "version": "0.1.0"
     },
     {
       "ailang": ">=0.18.11",
