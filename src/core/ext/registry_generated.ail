@@ -11,7 +11,6 @@ import pkg/sunholo/motoko_ext_mcp/register (register_with_config as register_mcp
 import pkg/sunholo/motoko_ext_exa_search/register (register_with_config as register_exa_search)
 import pkg/sunholo/motoko_ext_ailang_docs/register (register_with_config as register_ailang_docs)
 import pkg/sunholo/motoko_ext_compose/register (register_with_config as register_compose)
-import pkg/sunholo/motoko_ext_a2a/register (register_with_config as register_a2a)
 import pkg/sunholo/motoko_ext_decision_framework/register (register_with_config as register_decision_framework)
 import pkg/sunholo/motoko_ext_microrag/register (register_with_config as register_microrag)
 import pkg/sunholo/motoko_ext_compaction_ai/register (register_with_config as register_compaction_ai)
@@ -23,7 +22,7 @@ import pkg/sunholo/motoko_ext_abi/types (ExtRegistry)
 import std/string (split, trim)
 import std/option (Option, Some, None)
 
-func resolve(name: string, cfg: RuntimeConfig) -> Option[ExtensionHooks] {
+func resolve(name: string, cfg: RuntimeConfig) -> Option[ExtensionHooks] ! {IO, Env, AI, Net, FS, Process, SharedMem, Clock, Stream, SharedIndex, Rand, Trace} {
   if name == "test_dummy" then Some(register_test_dummy(cfg))
   else if name == "omnigraph" then Some(register_omnigraph(cfg))
   else if name == "context_mode" then Some(register_context_mode(cfg))
@@ -31,7 +30,6 @@ func resolve(name: string, cfg: RuntimeConfig) -> Option[ExtensionHooks] {
   else if name == "exa_search" then Some(register_exa_search(cfg))
   else if name == "ailang_docs" then Some(register_ailang_docs(cfg))
   else if name == "compose" then Some(register_compose(cfg))
-  else if name == "a2a" then Some(register_a2a(cfg))
   else if name == "decision_framework" then Some(register_decision_framework(cfg))
   else if name == "microrag" then Some(register_microrag(cfg))
   else if name == "compaction_ai" then Some(register_compaction_ai(cfg))
@@ -44,7 +42,7 @@ func with_id(h: ExtensionHooks, id: string) -> ExtensionHooks {
   { h | id: id }
 }
 
-func parse_tokens(xs: [string], idx: int, acc: [ExtensionHooks], cfg: RuntimeConfig) -> ExtRegistry ! {Env, FS} {
+func parse_tokens(xs: [string], idx: int, acc: [ExtensionHooks], cfg: RuntimeConfig) -> ExtRegistry ! {IO, Env, AI, Net, FS, Process, SharedMem, Clock, Stream, SharedIndex, Rand, Trace} {
   match xs {
     [] => { hooks: acc },
     raw :: rest => {
@@ -60,7 +58,7 @@ func parse_tokens(xs: [string], idx: int, acc: [ExtensionHooks], cfg: RuntimeCon
   }
 }
 
-export func parse_core_ext_order(raw: string, cfg: RuntimeConfig) -> ExtRegistry ! {Env, FS} {
+export func parse_core_ext_order(raw: string, cfg: RuntimeConfig) -> ExtRegistry ! {IO, Env, AI, Net, FS, Process, SharedMem, Clock, Stream, SharedIndex, Rand, Trace} {
   if trim(raw) == "" then { hooks: [] }
   else parse_tokens(split(raw, ","), 0, [], cfg)
 }

@@ -6,37 +6,48 @@ module_prefix = "src"
 ailang = ">=0.30.0"
 
 [dependencies]
+# Every extension is pinned to a REGISTRY version — the online registry
+# (registry.ailang.sunholo.com) is the single source of truth. Do not add
+# { path = ... } overrides here: they were the cause of the local-vs-published
+# drift that made this repo hard to reason about. Publish, then repin.
+#
+# The 0.3.2 / 0.2.6 / 0.2.4 pins below carry the effect-row widenings required
+# by AILANG's effect-row soundness fix (ailang 1282767ca, 2026-07-22).
 "sunholo/logging" = "0.4.0"
-# Registry-published versions (ailang-packages 2026-05-08).
 "sunholo/motoko_ext_abi" = "2.2.0"
 "sunholo/motoko_ext_test_dummy" = "0.2.2"
-"sunholo/motoko_ext_omnigraph" = "0.2.3"
-"sunholo/motoko_ext_context_mode" = { path = "packages/motoko-ext-context-mode" }
+"sunholo/motoko_ext_omnigraph" = "0.2.4"
+"sunholo/motoko_ext_context_mode" = "0.2.4"
 "sunholo/motoko_ext_mcp" = "0.2.7"
-"sunholo/motoko_ext_exa_search" = "0.2.7"
+"sunholo/motoko_ext_exa_search" = "0.2.8"
 "sunholo/motoko_ext_ai_compat" = "0.2.2"
-"sunholo/motoko_ext_compose" = "0.2.5"
-"sunholo/motoko_ext_a2a" = "0.2.2"
+"sunholo/motoko_ext_compose" = "0.2.6"
 "sunholo/motoko_ext_decision_framework" = "0.2.2"
 "sunholo/motoko_ext_microrag" = "0.4.2"
-"sunholo/motoko_ext_compaction_ai" = "0.3.1"
-"sunholo/motoko_ext_ailang_docs" = "0.1.4"
+"sunholo/motoko_ext_compaction_ai" = "0.3.2"
+"sunholo/motoko_ext_ailang_docs" = "0.1.5"
 "sunholo/motoko_ext_fmt" = "0.1.0"
 "sunholo/motoko_ext_scratchpad" = { path = "packages/motoko_scratchpad" }
+
+# NOTE: sunholo/motoko_ext_a2a is deliberately NOT compiled in. Its delegate
+# path calls uuid4() (Rand), but motoko_ext_abi 2.2.0's ExtensionHooks declares
+# CLOSED effect rows that exclude Rand, so a2a cannot type-check under the
+# post-1282767ca effect checker. Re-enabling it requires an ABI bump (add Rand
+# to the hook rows), which cascades a re-annotation through every extension.
+# a2a is not referenced by any profile, so nothing is lost today.
 
 [extensions]
 packages      = [
   "sunholo/motoko_ext_test_dummy@0.2.2",
-  "sunholo/motoko_ext_omnigraph@0.2.3",
-  "sunholo/motoko_ext_context_mode@0.2.2",
+  "sunholo/motoko_ext_omnigraph@0.2.4",
+  "sunholo/motoko_ext_context_mode@0.2.4",
   "sunholo/motoko_ext_mcp@0.2.7",
-  "sunholo/motoko_ext_exa_search@0.2.7",
-  "sunholo/motoko_ext_ailang_docs@0.1.4",
-  "sunholo/motoko_ext_compose@0.2.5",
-  "sunholo/motoko_ext_a2a@0.2.2",
+  "sunholo/motoko_ext_exa_search@0.2.8",
+  "sunholo/motoko_ext_ailang_docs@0.1.5",
+  "sunholo/motoko_ext_compose@0.2.6",
   "sunholo/motoko_ext_decision_framework@0.2.2",
   "sunholo/motoko_ext_microrag@0.4.2",
-  "sunholo/motoko_ext_compaction_ai@0.3.1",
+  "sunholo/motoko_ext_compaction_ai@0.3.2",
   "sunholo/motoko_ext_fmt@0.1.0",
   "sunholo/motoko_ext_scratchpad@0.1.0",
 ]

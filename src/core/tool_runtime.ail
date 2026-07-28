@@ -149,11 +149,11 @@ export pure func backend_for(call: ToolCallEnvelope, ohmy_pi: bool) -> ToolBacke
   else Native
 }
 
-export func run_native_batch(calls: [ToolCallEnvelope], workdir: string) -> [ToolResultItem] ! {FS, Process} {
+export func run_native_batch(calls: [ToolCallEnvelope], workdir: string) -> [ToolResultItem] ! {Env, FS, Process} {
   run_native_batch_rec(calls, workdir)
 }
 
-func run_native_batch_rec(calls: [ToolCallEnvelope], workdir: string) -> [ToolResultItem] ! {FS, Process} {
+func run_native_batch_rec(calls: [ToolCallEnvelope], workdir: string) -> [ToolResultItem] ! {Env, FS, Process} {
   match calls {
     [] => [],
     call :: rest => {
@@ -163,7 +163,7 @@ func run_native_batch_rec(calls: [ToolCallEnvelope], workdir: string) -> [ToolRe
   }
 }
 
-func run_native_call(call: ToolCallEnvelope, workdir: string) -> ToolResultItem ! {FS, Process} {
+func run_native_call(call: ToolCallEnvelope, workdir: string) -> ToolResultItem ! {Env, FS, Process} {
   let args = call.arguments;
   if call.tool == "ReadFile" then
     run_read_file(call.id, arg_string(args, "path", ""), arg_number(args, "start", 1), arg_number(args, "end", 200), workdir)

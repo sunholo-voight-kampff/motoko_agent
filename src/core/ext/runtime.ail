@@ -24,7 +24,7 @@ import pkg/sunholo/motoko_ext_abi/types (
 import src/core/types (Msg)
 import src/core/ext/registry_generated (parse_core_ext_order)
 
-export func init_runtime_with_config(cfg: RuntimeConfig) -> ExtRuntime ! {Env, FS, Net} {
+export func init_runtime_with_config(cfg: RuntimeConfig) -> ExtRuntime ! {AI, Clock, Env, FS, IO, Net, Process, Rand, SharedIndex, SharedMem, Stream, Trace} {
   {
     registry: parse_core_ext_order(join_order(cfg.extensions.order), cfg),
     strict_mode: cfg.extensions.strict,
@@ -379,7 +379,7 @@ func smoke_hook_b() -> ExtensionHooks {
   }
 }
 
-func dispatch_smoke_record_hooks() -> bool
+func dispatch_smoke_record_hooks() -> bool ! {AI, Clock, Env, FS, IO, Net, Process, SharedMem, Stream}
   tests [((), true)]
   {
     let vsmoke: VerificationConfig = { enabled: false, command: "make check_core" };
@@ -447,7 +447,7 @@ func merge_deny_over_pending() -> bool
   }
 
 -- dispatch_tool_policy returns Pending when an extension hook returns it.
-func dispatch_pending_hook() -> bool
+func dispatch_pending_hook() -> bool ! {Clock, IO}
   tests [((), true)]
   {
     let pending_hook: ExtensionHooks = {

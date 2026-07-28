@@ -173,7 +173,7 @@ func match_to_json(m: SearchMatch) -> Json {
 -- a single-element input, run_native_batch always returns a single-element
 -- output, but the type system doesn't enforce that. The branch keeps the
 -- callback total: no exceptions, no nil returns.
-export func dispatch_one(workdir: string, call: ToolCall) -> string ! {FS, Process} {
+export func dispatch_one(workdir: string, call: ToolCall) -> string ! {Env, FS, Process} {
   let envelope = tool_call_to_envelope(call) in
   let results = run_native_batch([envelope], workdir) in
   match results {
