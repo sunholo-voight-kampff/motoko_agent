@@ -1171,7 +1171,15 @@ func loop_v2(
       kv("continue_on_truncation", js(getEnvOr("MOTOKO_CONTINUE_ON_TRUNCATION", "1"))),
       kv("retry_empty", js(getEnvOr("MOTOKO_RETRY_EMPTY", "1"))),
       kv("retry_stream_error", js(getEnvOr("MOTOKO_RETRY_STREAM_ERROR", "1"))),
-      kv("system_md", js(if getEnvOr("SYSTEM_MD", "") == "" then "unset" else "set"))
+      kv("system_md", js(if getEnvOr("SYSTEM_MD", "") == "" then "unset" else "set")),
+      -- RESOLVED profile (M-EVAL-MEASUREMENT-CONTRACT M4). The eval harness banks
+      -- this and asserts it against what models.yml CLAIMED, so a model silently
+      -- running the wrong profile is caught. All ten cloud motoko entries spent
+      -- weeks defaulting to `dogfood` -- no ailang_docs, no microrag, and a
+      -- verify gate (`make check_core`) that cannot work in a benchmark
+      -- workspace -- while their descriptions advertised the opposite. Reading
+      -- MOTOKO_CONFIG here reports what motoko ACTUALLY loaded, not the claim.
+      kv("profile", js(getEnvOr("MOTOKO_CONFIG", "default")))
     ])
     else ();
   if step_budget <= 0 then {
