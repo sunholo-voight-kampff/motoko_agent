@@ -1138,6 +1138,17 @@ func partition_system_msgs(msgs: [Message]) -> MsgSysSplit {
   }
 }
 
+-- join_ext_ids renders the LOADED extension ids as a comma-separated string for
+-- the step-0 runtime_config_resolved broadcast. Used as treatment-integrity
+-- evidence by the AILANG eval harness (m-eval-experiment-registry).
+func join_ext_ids(hooks: [ExtensionHooks]) -> string {
+  match hooks {
+    [] => "",
+    [h] => h.id,
+    h :: rest => "${h.id},${join_ext_ids(rest)}"
+  }
+}
+
 func loop_v2(
   rt: ExtRuntime,
   task: string,
@@ -1179,7 +1190,14 @@ func loop_v2(
       -- verify gate (`make check_core`) that cannot work in a benchmark
       -- workspace -- while their descriptions advertised the opposite. Reading
       -- MOTOKO_CONFIG here reports what motoko ACTUALLY loaded, not the claim.
-      kv("profile", js(getEnvOr("MOTOKO_CONFIG", "default")))
+      kv("profile", js(getEnvOr("MOTOKO_CONFIG", "default"))),
+      -- The extension IDs actually LOADED for this run. The profile name alone
+      -- is not proof: an eval arm whose treatment IS an extension needs to show
+      -- the extension was live, not merely that a profile was requested. The
+      -- AILANG eval harness asserts on this as treatment integrity — a fmt A/B
+      -- arm that cannot demonstrate `fmt` loaded is void by its own
+      -- preregistration rather than quietly reported as a null.
+      kv("extensions", js(join_ext_ids(rt.registry.hooks)))
     ])
     else ();
   if step_budget <= 0 then {
