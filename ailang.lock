@@ -1,7 +1,7 @@
 {
-  "ailang_version": "v0.30.0-267-gee36be967-dirty",
-  "generated_at": "2026-07-29T16:11:14.257884Z",
-  "generator": "ailang lock v0.30.0-267-gee36be967-dirty",
+  "ailang_version": "v0.31.0-9-g7ce83f299-dirty",
+  "generated_at": "2026-07-30T19:35:46.032427Z",
+  "generator": "ailang lock v0.31.0-9-g7ce83f299-dirty",
   "packages": [
     {
       "ailang": ">=0.9.2",
@@ -188,7 +188,7 @@
     },
     {
       "ailang": ">=0.17.0",
-      "content_hash": "sha256:8942062b65aafae31b394bc29977ce2f5edccdce82ed7235f1811f6e6501978c",
+      "content_hash": "sha256:38d5d065e00127cfaf982f244da11bff540454783aab94fd5e74539250e7afea",
       "effects": [
         "AI",
         "Clock",
@@ -206,7 +206,7 @@
       "interface_hash": "sha256:da692e762544ec15bff8a8fcc71b33c64859d010efbe9a592ee87daefbad57f6",
       "name": "sunholo/motoko_ext_fmt",
       "source": "registry",
-      "version": "0.1.1"
+      "version": "0.4.0"
     },
     {
       "ailang": ">=0.18.11",
