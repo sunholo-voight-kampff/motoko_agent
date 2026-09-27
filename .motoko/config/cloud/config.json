@@ -39,6 +39,7 @@
   },
   "extensions": {
     "order": [
+      "empty_stop_guard",
       "compaction_ai",
       "context_mode",
       "ailang_docs",
