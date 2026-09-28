@@ -592,6 +592,18 @@ export function buildChildEnv(
   if (process.env.AILANG_STDLIB_PATH) {
     childEnv.AILANG_STDLIB_PATH = process.env.AILANG_STDLIB_PATH;
   }
+  // The rig GPU lease, forwarded only when present.
+  //
+  // A shared local-model box can put an admission gateway in front of ollama
+  // that serves long requests only to the holder of its rig lock. The holder's
+  // token is exported as AILANG_RIG_LEASE, and ailang's own HTTP clients attach
+  // it (as X-Rig-Lease, loopback hosts only) to every model call. The model
+  // call is made by the AILANG runtime, a CHILD of this process, and this is an
+  // allowlist: without this line the token is dropped, every local-model step
+  // is refused with 423 while the lock is held, and nothing else changes.
+  if (process.env.AILANG_RIG_LEASE) {
+    childEnv.AILANG_RIG_LEASE = process.env.AILANG_RIG_LEASE;
+  }
   if (process.env.MOTOKO_OTEL && process.env.MOTOKO_OTEL.trim() !== "") {
     childEnv.MOTOKO_OTEL = process.env.MOTOKO_OTEL;
     childEnv.OTEL_EXPORTER_OTLP_ENDPOINT =
