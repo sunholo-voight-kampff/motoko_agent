@@ -1,0 +1,5 @@
+{
+  "model": "ollama/qwen3.8:27b-mxfp8",
+  "threshold_pct": 50,
+  "keep_recent": 6
+}
