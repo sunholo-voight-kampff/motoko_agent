@@ -12,7 +12,8 @@ module src/core/rpc
 -- MIGRATION sprint plan + CHANGELOG.md and git log around 2026-05-06.
 
 import src/core/agent_loop_v2 (run_v2_with_conversation)
-import src/core/context_usage (context_limit_for)
+import src/core/context_usage (resolve_context_limit)
+import src/core/ports (ambient_context_reader, empty_world_state)
 import src/core/test/stub_step (LiveAI)
 import std/io     (println, exit)
 import std/json   (Json, encode, jo, ja, kv, js, jb, jnum)
@@ -23,8 +24,9 @@ import src/core/types  (Msg, version)
 import src/core/prompts (with_cache_hint, with_agents_context)
 import src/core/cache   (get_hint)
 import src/core/config  (RuntimeConfig, InvocationConfig, load_runtime_config, load_invocation_config, CostRates)
-import pkg/sunholo/motoko_ext_abi/types (BudgetPlan, ExtRuntime)
+import pkg/sunholo/motoko_ext_abi/types (empty_ext_world, BudgetPlan, ExtRuntime)
 import src/core/ext/runtime (init_runtime_with_config, loaded_extension_names, dispatch_build_system_prompt, dispatch_budget_plan)
+import src/core/ext/ctx_defaults (noop_ext_ports, empty_ext_artifacts, zero_token_telemetry)
 
 -- RunSettings carries the agent's runtime knobs from RuntimeConfig into
 -- compute_budget_plan and the v2 entry point. Preserved post-M10 because
@@ -98,11 +100,20 @@ func compute_budget_plan(
   hybrid_enabled: bool,
   step: int,
   settings: RunSettings
-) -> BudgetPlan ! {Env, IO, Clock} {
+) -> BudgetPlan ! {Env, IO, Clock, FS} {
   let max_steps = clamp_positive(settings.max_steps, 50);
   let verifier_mode = settings.verifier_mode;
   let base = default_budget_plan(max_steps, verifier_mode);
   let remaining = if base.total - step < 0 then 0 else base.total - step;
+  -- WI-D3. The AMBIENT reader, deliberately and not as a fallback: `rpc` is the
+  -- live launcher and reads the host two lines below this in `run_with_config`,
+  -- so a world here would be a world nothing else in this module has.
+  --
+  -- The successor is not threaded, and that costs nothing rather than being
+  -- excused: both ambient bindings return `next_state: state` unchanged — D1's
+  -- identity transition — so there is no successor to lose. A deterministic run
+  -- never reaches this module; it drives `run_v2_session_traced` directly.
+  let context_limit = resolve_context_limit(ambient_context_reader(), empty_world_state(), model).value;
   let ctx = {
     task: task,
     step: step,
@@ -115,9 +126,12 @@ func compute_budget_plan(
     env_server_url: "",
     budget_remaining: remaining,
     history_slice: [],
-    state_key: "core:ext:budget",
-    context_limit: context_limit_for(model)
-  };
+	    state_key: "core:ext:budget",
+	    context_limit: context_limit,
+	    ports: noop_ext_ports(),
+	    artifacts: empty_ext_artifacts(),
+	    telemetry: zero_token_telemetry(), world: empty_ext_world()
+	  };
   let patched = dispatch_budget_plan(ext_runtime, ctx, base);
   clamp_budget_plan(patched, max_steps)
 }
@@ -153,7 +167,7 @@ func reject_if_ohmy_pi_unsupported(cfg: RuntimeConfig) -> () ! {IO} {
   }
 }
 
-export func run_with_config(cfg: RuntimeConfig, inv: InvocationConfig) -> () ! {Net, AI, SharedMem, IO, Env, FS, Clock, Process, Stream, Trace} {
+export func run_with_config(cfg: RuntimeConfig, inv: InvocationConfig) -> () ! {AI, Clock, Env, FS, IO, Net, Process, SharedMem, Stream, Trace, Rand} {
   let _ = reject_if_ohmy_pi_unsupported(cfg);
   let env_url = cfg.backend.url;
   let task = inv.task;
@@ -208,6 +222,8 @@ export func run_with_config(cfg: RuntimeConfig, inv: InvocationConfig) -> () ! {
   let remaining = budget.total;
   let system_with_agents = with_agents_context(raw_system, cwd);
   let system_with_hint = with_cache_hint(system_with_agents, hint);
+  -- WI-D3, and see `compute_budget_plan` for why the reader is the ambient one.
+  let context_limit = resolve_context_limit(ambient_context_reader(), empty_world_state(), model).value;
   let system_ctx = {
     task: task,
     step: 0,
@@ -220,9 +236,12 @@ export func run_with_config(cfg: RuntimeConfig, inv: InvocationConfig) -> () ! {
     env_server_url: env_url,
     budget_remaining: remaining,
     history_slice: [],
-    state_key: "core:ext:system",
-    context_limit: context_limit_for(model)
-  };
+	    state_key: "core:ext:system",
+	    context_limit: context_limit,
+	    ports: noop_ext_ports(),
+	    artifacts: empty_ext_artifacts(),
+	    telemetry: zero_token_telemetry(), world: empty_ext_world()
+	  };
   let system = dispatch_build_system_prompt(ext_runtime, system_ctx, system_with_hint);
 
   let init: [Msg] = [
@@ -237,7 +256,7 @@ export func run_with_config(cfg: RuntimeConfig, inv: InvocationConfig) -> () ! {
   run_v2_with_conversation(ext_runtime, task, env_url, hybrid_enabled, budget, model, init, settings.workdir, budget.total, settings.ohmy_pi, settings.max_cost_millicents, settings.cost_rates, LiveAI)
 }
 
-export func main() -> () ! {Net, AI, SharedMem, IO, Env, FS, Clock, Process, Stream, Trace} {
+export func main() -> () ! {AI, Clock, Env, FS, IO, Net, Process, SharedMem, Stream, Trace, Rand} {
   let cfg = load_runtime_config();
   let inv = load_invocation_config();
   run_with_config(cfg, inv)

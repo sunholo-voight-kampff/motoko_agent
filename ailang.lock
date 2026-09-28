@@ -1,7 +1,7 @@
 {
-  "ailang_version": "v0.24.2",
-  "generated_at": "2026-06-21T12:00:58.941848763Z",
-  "generator": "ailang lock v0.24.2",
+  "ailang_version": "v0.33.0",
+  "generated_at": "2026-08-09T18:25:06.300328177Z",
+  "generator": "ailang lock v0.33.0",
   "packages": [
     {
       "ailang": ">=0.9.2",
@@ -16,7 +16,34 @@
       "version": "0.4.0"
     },
     {
-      "content_hash": "sha256:dd9c157a727eb1c8ef5c3c458c035b49aeafe8014aba430a64ef0bd834f82410",
+      "content_hash": "sha256:12413434e2609311c3f8c9409876c2a316b184d5f15c1164936f3ae8536c2632",
+      "effects": [
+        "AI",
+        "Clock",
+        "Env",
+        "FS",
+        "IO",
+        "Net",
+        "Process",
+        "SharedIndex",
+        "SharedMem",
+        "Stream"
+      ],
+      "exports": [
+        "src/core/compaction",
+        "src/core/compress",
+        "src/core/config",
+        "src/core/tool_contract",
+        "src/core/types"
+      ],
+      "interface_hash": "sha256:088dde5efbad8ec81ece0f5b87809e3162ae9b62f9af300b7e9647d0dfd64f5c",
+      "name": "sunholo/motoko_core",
+      "path": "/workspaces/motoko_agent/.packages/motoko_core",
+      "source": "path",
+      "version": "0.1.0"
+    },
+    {
+      "content_hash": "sha256:6f1e3dbba60e8aeac775f7b2b83112b8a7b8bed82a86850fe0c4a043fe73d474",
       "effects": [
         "Env",
         "FS",
@@ -32,24 +59,26 @@
       ],
       "interface_hash": "sha256:34ae6a2ee77274abdfc380dd755246948501580dd1739dd197f33601c6ceac51",
       "name": "sunholo/motoko_ext_a2a",
-      "source": "registry",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-a2a",
+      "source": "path",
       "version": "0.2.2"
     },
     {
       "ailang": ">=0.17.0",
-      "content_hash": "sha256:60d6ec4684d6bf80d1ec800efda7aa598ccbebcbf529dd6c760fd10c5c101956",
+      "content_hash": "sha256:bab603afeae49eddeb807bc835b02008ed30782afef5c90871fa85784953cb01",
       "effects": [],
       "exports": [
         "sunholo/motoko_ext_abi/types"
       ],
       "interface_hash": "sha256:b7c7cb6f878bbe2719481a152e21eb27e699dafaf007bf0093397e7c10580f92",
       "name": "sunholo/motoko_ext_abi",
-      "source": "registry",
-      "version": "2.2.0"
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-abi",
+      "source": "path",
+      "version": "5.0"
     },
     {
       "ailang": ">=0.21.0",
-      "content_hash": "sha256:23a47204a8b61a201afd38f320d2bb78e28e6c80e5e69b3ccc09b506d2a25f1d",
+      "content_hash": "sha256:209b7c8b0e6fc4b93a4299cceb2502031b1cb7b1ef7e8f4f95e89a65c6922cd8",
       "effects": [
         "AI",
         "Clock",
@@ -66,12 +95,13 @@
       ],
       "interface_hash": "sha256:b26f0daa4c37214249cb0445d8bc7391be5f0622fd7884fb757d7e548a3e3ba9",
       "name": "sunholo/motoko_ext_ai_compat",
-      "source": "registry",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-ai-compat",
+      "source": "path",
       "version": "0.2.1"
     },
     {
       "ailang": ">=0.18.11",
-      "content_hash": "sha256:f4f61987d4e4897a3d00842dc8f55a033918cbd563ab3ed12655046306f6a140",
+      "content_hash": "sha256:a55b073ae4f3ea7597a704270165a5a6717c128249acd2640a190e49d0ef32de",
       "effects": [
         "Env",
         "FS",
@@ -85,12 +115,13 @@
       ],
       "interface_hash": "sha256:dab0db4a30c94c946484dba4acf4eed3acbb8c2d25b877d0a47de4f5d66ef3a4",
       "name": "sunholo/motoko_ext_ailang_docs",
-      "source": "registry",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-ailang-docs",
+      "source": "path",
       "version": "0.1.4"
     },
     {
       "ailang": ">=0.19.1",
-      "content_hash": "sha256:4f72857ac73d3b8702903e0fbaa30d76a4d2eab23f9cf181a5d219c9fcdbeeeb",
+      "content_hash": "sha256:729763bfecbbc10fb7553a46340cb02ccf947bb5c54120df548e19e59739f9a3",
       "effects": [
         "AI",
         "Clock",
@@ -109,12 +140,36 @@
       ],
       "interface_hash": "sha256:2b85b40984299498af68ed3068d2b45a0f33b57b87614cb4f1e1f9e477a063e8",
       "name": "sunholo/motoko_ext_compaction_ai",
-      "source": "registry",
-      "version": "0.2.0"
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-compaction-ai",
+      "source": "path",
+      "version": "0.3.0"
+    },
+    {
+      "content_hash": "sha256:9e5075edc4242e9b774bf8092749df4766650ee7c9cce75e0de84e5457b205cc",
+      "effects": [
+        "AI",
+        "Clock",
+        "Env",
+        "FS",
+        "IO",
+        "Net",
+        "Process",
+        "SharedMem",
+        "Stream"
+      ],
+      "exports": [
+        "sunholo/motoko_ext_compaction_structural/compaction_structural",
+        "sunholo/motoko_ext_compaction_structural/register"
+      ],
+      "interface_hash": "sha256:631d8041e6d04ba2e5e07b1372551dda38b5b12eb355c3331e39b36d12cc36ee",
+      "name": "sunholo/motoko_ext_compaction_structural",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-compaction-structural",
+      "source": "path",
+      "version": "1.1.0"
     },
     {
       "ailang": ">=0.21.0",
-      "content_hash": "sha256:e84635186f1b6c61ba57005820a93b05b6eebde137cfbe94521bfe63750713cc",
+      "content_hash": "sha256:23ec047fc95411958734ddef4335ed94fc552e8225abcbc1cb532ed5539069f0",
       "effects": [
         "AI",
         "Clock",
@@ -138,6 +193,7 @@
         "sunholo/motoko_ext_compose/config",
         "sunholo/motoko_ext_compose/guard",
         "sunholo/motoko_ext_compose/ledger",
+        "sunholo/motoko_ext_compose/proc",
         "sunholo/motoko_ext_compose/prompts",
         "sunholo/motoko_ext_compose/register",
         "sunholo/motoko_ext_compose/retry",
@@ -146,14 +202,40 @@
         "sunholo/motoko_ext_compose/types",
         "sunholo/motoko_ext_compose/validator"
       ],
-      "interface_hash": "sha256:e74319da8d0349187cbda3197617215173b764ba6c8c5f38922f794c9dbe1341",
+      "interface_hash": "sha256:c0a42eda50c8967c51f646415957f40a932aa0bd2241e5fba3ff96c9883154f2",
       "name": "sunholo/motoko_ext_compose",
-      "source": "registry",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-compose",
+      "source": "path",
       "version": "0.2.4"
     },
     {
+      "ailang": ">=0.26.0",
+      "content_hash": "sha256:121e152dfcc823cee48b24544e921a151823444e696db60457c521be9ac9e640",
+      "effects": [
+        "AI",
+        "Clock",
+        "Env",
+        "FS",
+        "IO",
+        "Net",
+        "Process",
+        "SharedMem",
+        "Stream"
+      ],
+      "exports": [
+        "sunholo/motoko_ext_conformance/fixtures/reject_fixtures",
+        "sunholo/motoko_ext_conformance/harness",
+        "sunholo/motoko_ext_conformance/invariants"
+      ],
+      "interface_hash": "sha256:044c9c6556e62fa243c5ceccae783cc4e1e60a05ee33088ae6fe34ee1ee14fdf",
+      "name": "sunholo/motoko_ext_conformance",
+      "path": "/workspaces/motoko_agent/packages/motoko_ext_conformance",
+      "source": "path",
+      "version": "4.0.0"
+    },
+    {
       "ailang": ">=0.17.0",
-      "content_hash": "sha256:12b246bb7c453aa6973a078c0284118f4dea394e5e52ffff3fb4bfa188923e49",
+      "content_hash": "sha256:1043e593d988b5cc3c348a11e79f288bdd7f2f69fdb175b263b4aeebe044e83d",
       "effects": [
         "Clock",
         "Env",
@@ -178,18 +260,43 @@
     },
     {
       "ailang": ">=0.17.0",
-      "content_hash": "sha256:9e688d0cddec800617055879f6c682f7d8bb5b15ee046ff825b08c69db9e67be",
+      "content_hash": "sha256:a80ad72595930622c906a57b614f8c85242f5e6d1cf756e02e1b3a35da3270c4",
       "effects": [],
       "exports": [
         "sunholo/motoko_ext_decision_framework/register"
       ],
       "interface_hash": "sha256:b211b27840a2c17d9a8e74b7a762ea463cb322a502caafb8d5fe90d58451c7af",
       "name": "sunholo/motoko_ext_decision_framework",
-      "source": "registry",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-decision-framework",
+      "source": "path",
       "version": "0.2.2"
     },
     {
-      "content_hash": "sha256:9f573b402fd8472957b9f4389c183a197602c36f6bde746764ce5146eb9f4c92",
+      "ailang": ">=0.26.0",
+      "content_hash": "sha256:af1616453b690b08fe3028c97a5427ef8d13b4d71a9231ec4c215f7e7929be87",
+      "effects": [
+        "AI",
+        "Clock",
+        "Env",
+        "FS",
+        "IO",
+        "Net",
+        "Process",
+        "SharedMem",
+        "Stream"
+      ],
+      "exports": [
+        "sunholo/motoko_ext_empty_stop_guard/empty_stop_guard",
+        "sunholo/motoko_ext_empty_stop_guard/register"
+      ],
+      "interface_hash": "sha256:e962e5ecad229f177c2f830383858e9768181d61122c4019d79be0d4f6c44a41",
+      "name": "sunholo/motoko_ext_empty_stop_guard",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-empty-stop-guard",
+      "source": "path",
+      "version": "0.1.0"
+    },
+    {
+      "content_hash": "sha256:a326bb257101fbcdf08f2e0e1c6993204960f7284704ff7d5acb25223b7a156c",
       "effects": [
         "Env",
         "FS",
@@ -203,12 +310,13 @@
       ],
       "interface_hash": "sha256:a3e8d04c42458504445f5104732e1e19c3a21c9b2ff70ff5049458575a26dc60",
       "name": "sunholo/motoko_ext_exa_search",
-      "source": "registry",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-exa-search",
+      "source": "path",
       "version": "0.2.7"
     },
     {
       "ailang": ">=0.18.11",
-      "content_hash": "sha256:c56f63e16a6840154fe9d17c706acf41324711b0dc286852201ee310f6e660cf",
+      "content_hash": "sha256:7d101de9a3b9c1af021b55e16592b748b2ac4708321ccff0f0a0afabd82e2e44",
       "effects": [
         "Env",
         "FS",
@@ -226,12 +334,13 @@
       ],
       "interface_hash": "sha256:b54212453e0e57926c515dfcd4075235c4b5c20ec7e530a6d72431a3ac7ee77c",
       "name": "sunholo/motoko_ext_mcp",
-      "source": "registry",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-mcp",
+      "source": "path",
       "version": "0.2.7"
     },
     {
       "ailang": ">=0.17.0",
-      "content_hash": "sha256:c318518dae092e4d851ff889647595ebc28010829e49596b7b28eb58ebc9e397",
+      "content_hash": "sha256:e0295ba16f7b4a5b65de5b9e5444d42ad89a3e1318e9e7a86dbe6356e4a6cfa9",
       "effects": [
         "AI",
         "Clock",
@@ -248,12 +357,13 @@
       ],
       "interface_hash": "sha256:5f507270c981fe6b2a8f8a30c7e427971e00afadb9826315fe0e7804863c4f13",
       "name": "sunholo/motoko_ext_microrag",
-      "source": "registry",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-microrag",
+      "source": "path",
       "version": "0.4.2"
     },
     {
       "ailang": ">=0.18.11",
-      "content_hash": "sha256:2d43f6d4dd09ff1a88225736e1f35d0e7290dfdf232aed70a46d248a2c8d4919",
+      "content_hash": "sha256:095640905d60f69b6ae67798ff5e6187acf4348830ad66e7fa98e7b440fa84c5",
       "effects": [
         "Env",
         "FS",
@@ -273,11 +383,36 @@
       ],
       "interface_hash": "sha256:4878133f10f38684a944297ce9f3245152ad4be72a19d1269d59ab7b298e04d2",
       "name": "sunholo/motoko_ext_omnigraph",
-      "source": "registry",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-omnigraph",
+      "source": "path",
       "version": "0.2.3"
     },
     {
-      "content_hash": "sha256:9d975ac8abc94893c3008cd2864f2b59aafe430f4da56406544900bb2431da3d",
+      "ailang": ">=0.26.0",
+      "content_hash": "sha256:8e8048ceb5536de206d83a5c0f89857e98ed4f2fe280215e1b7ffad05a52ee15",
+      "effects": [
+        "AI",
+        "Clock",
+        "Env",
+        "FS",
+        "IO",
+        "Net",
+        "Process",
+        "SharedMem",
+        "Stream"
+      ],
+      "exports": [
+        "sunholo/motoko_ext_progress_contract_guard/progress_contract_guard",
+        "sunholo/motoko_ext_progress_contract_guard/register"
+      ],
+      "interface_hash": "sha256:3d9fe1475187db332755b4c59fb218fcee554985a0ed6ba6544c9d480c20bd3b",
+      "name": "sunholo/motoko_ext_progress_contract_guard",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-progress-contract-guard",
+      "source": "path",
+      "version": "0.1.0"
+    },
+    {
+      "content_hash": "sha256:93a63d20658d514a91e684a19a5327caebe8123cf15ce9f45600ee40f2520c01",
       "effects": [
         "AI",
         "Clock",
@@ -304,7 +439,7 @@
     },
     {
       "ailang": ">=0.17.0",
-      "content_hash": "sha256:cd46cbe86e9243721133d3d0dc2c82d8d1fdc6e45d7f0f91782db0cf9042b388",
+      "content_hash": "sha256:ee7221d57cb66f611a2ee1fffed1d205c5dd1fe183562ab3ba14ca60a559bfb3",
       "effects": [
         "Env"
       ],
@@ -313,7 +448,8 @@
       ],
       "interface_hash": "sha256:2622ae3b293781330729498a6571cb25fc1f4ccb900b0b494f316b8f61500e80",
       "name": "sunholo/motoko_ext_test_dummy",
-      "source": "registry",
+      "path": "/workspaces/motoko_agent/packages/motoko-ext-test-dummy",
+      "source": "path",
       "version": "0.2.2"
     }
   ],

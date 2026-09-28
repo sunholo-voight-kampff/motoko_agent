@@ -1,0 +1,107 @@
+-- Phase-B deterministic extension fixture.
+--
+-- This is an in-repo test extension, not a package. It exercises the
+-- extension-produced transcript paths before ledger emission is rewired.
+
+module src/core/test/ext_fixture
+
+import std/json (jo, kv, js)
+import std/option (None)
+import std/string (contains)
+import src/core/config (VerificationConfig)
+import pkg/sunholo/motoko_ext_abi/types (PreStepOutcome, ToolHandleOutcome, ResponseInterceptOutcome, FinalizeOutcome, 
+  BudgetPlan,
+  BudgetPatch,
+  ExtCtx,
+  ExtRuntime,
+  ExtensionHooks,
+  FinalizeDecision,
+  InterceptHandled,
+  ContinueWithFeedback,
+  NoDecision,
+  PassThrough,
+  PreStepDecision,
+  Compacted,
+  PromptPatch,
+  ResponseInterceptDecision,
+  ToolCallEnvelope,
+  ToolHandleDecision,
+  ToolPolicyDecision,
+  ToolResultEnvelope,
+  Handled
+)
+import src/core/types (Msg)
+import src/core/ext/ctx_defaults (empty_ext_artifacts)
+
+pure func count_system(msgs: [Msg]) -> int {
+  match msgs {
+    [] => 0,
+    m :: rest => (if m.role == "system" then 1 else 0) + count_system(rest)
+  }
+}
+
+pure func fixture_result(tool_call_id: string, tool: string, stdout: string) -> ToolResultEnvelope {
+  {
+    tool_call_id: tool_call_id,
+    tool: tool,
+    exit_code: 0,
+    stdout: stdout,
+    stderr: "",
+    metadata: jo([kv("fixture", js("phase_b"))])
+  }
+}
+
+pure func empty_prompt_patch(_ctx: ExtCtx) -> PromptPatch {
+  { prepend: [], append: [] }
+}
+
+pure func empty_budget_patch(_ctx: ExtCtx, _budget: BudgetPlan) -> BudgetPatch {
+  { requested_total: None, requested_solver: None, requested_verifier: None }
+}
+
+pure func allow_policy(_ctx: ExtCtx, _call: ToolCallEnvelope) -> ToolPolicyDecision {
+  Allow
+}
+
+pure func handle_tool(ctx: ExtCtx, call: ToolCallEnvelope)
+  -> ToolHandleOutcome ! {IO, Process, FS, AI, Env, Net, SharedMem, Clock, Stream, Rand}  { { decision: {
+  if call.tool == "FixtureEcho" then
+    Handled(fixture_result("fixture-internal-tool-id", "FixtureEcho", "fixture handled ${call.id}"))
+  else Delegate
+}, next_state: ctx.world } }
+
+pure func intercept_response(ctx: ExtCtx, response: string)
+  -> ResponseInterceptOutcome ! {IO, Process, FS, Clock}  { { decision: {
+  if contains(response, "[FIXTURE_INTERCEPT]") then
+    InterceptHandled(fixture_result("fixture-intercept-id", "FixtureIntercept", "fixture intercept"))
+  else NoIntercept
+}, next_state: ctx.world } }
+
+pure func solve_candidate(ctx: ExtCtx, candidate: string)
+  -> FinalizeOutcome ! {Process}  { { decision: {
+  if contains(candidate, "[FIXTURE_CONTINUE]") then
+    ContinueWithFeedback("fixture feedback")
+  else NoDecision
+}, next_state: ctx.world } }
+
+pure func pre_step(ctx: ExtCtx, msgs: [Msg])
+  -> PreStepOutcome ! {AI, IO, Trace}  { { decision: {
+  Compacted(msgs, "fixture_prestep sys=${show(count_system(msgs))}", empty_ext_artifacts())
+}, next_state: ctx.world } }
+
+export pure func fixture_rt() -> ExtRuntime {
+  let hooks: ExtensionHooks = {
+    id: "phase_b_fixture",
+    provided_tools: ["FixtureEcho"],
+    on_describe_tools: \_ . [],
+    on_build_system_prompt: empty_prompt_patch,
+    on_budget_plan: empty_budget_patch,
+    on_pre_step: pre_step,
+    on_tool_policy: allow_policy,
+    on_tool_handle: handle_tool,
+    on_response_intercept: intercept_response,
+    on_solver_candidate: solve_candidate
+  };
+  let v: VerificationConfig = { enabled: false, command: "make check_core" };
+  { registry: { hooks: [hooks] }, strict_mode: false, verification: v }
+}

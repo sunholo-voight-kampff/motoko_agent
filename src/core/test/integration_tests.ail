@@ -2,8 +2,9 @@ module src/core/test/integration_tests
 
 import std/string (repeat)
 import std/result (Result, Ok, Err)
-import std/ai (Message, ToolCall)
-import src/core/compaction (compact_step)
+import std/ai (ToolCall)
+import src/core/types (Msg)
+import pkg/sunholo/motoko_ext_compaction_structural/compaction_structural (compact_step_with_limit)
 import src/core/test/stub_step (prose_step, tool_step, scripted_to_step_result, terminal_step)
 
 -- Test 1: Cost-budget exhaustion math.
@@ -11,7 +12,7 @@ import src/core/test/stub_step (prose_step, tool_step, scripted_to_step_result, 
 --   step_cost = (100000*60000 + 50000*208000) / 1_000_000 = 16_400 mc
 -- After 3 steps: 3 * 16_400 = 49_200 < 50_000 cap → loop continues.
 -- After 4 steps: 4 * 16_400 = 65_600 >= 50_000 cap → BudgetExceeded fires.
--- The full-loop test (run_v2_with_stub + deny_all_rt + cap=50000) exercises
+-- The full-loop test (run_v2_with_scripted_ports + deny_all_rt + cap=50000) exercises
 -- this path end-to-end; this pure test verifies the arithmetic is correct.
 pure func test_cost_budget_exhausted() -> bool
   tests [((), true)]
@@ -20,31 +21,26 @@ pure func test_cost_budget_exhausted() -> bool
     step_cost * 3 < 50000 && step_cost * 4 >= 50000
   }
 
--- Test 2: Context exhaustion with test/small model.
--- test/small has context_limit_for = 80000; usage_percent reserves 75000 for output,
--- so the effective window is 5000 tokens. (test/tiny's limit of 100 is below the
--- reserve → effective <= 0 → usage_percent is pinned at 0 and compaction never fires.)
--- A 34000-char tool message + 4-char user message = 34004 chars total.
--- estimate_tokens_messages: (34004 + 6) / 7 = 4858 tokens → usage = 97% >= 95%.
--- Emergency compaction keeps the last 1 tool result — the big message itself — so
--- nothing shrinks and compact_step returns Err("compaction_exhausted: ...").
+-- Test 2: Context exhaustion with an explicit tiny test limit.
+-- A 380-char tool message + 4-char user message = 384 chars total.
+-- estimate_tokens_messages: (384 + 3) / 4 = 96 tokens → usage = 96% >= 95%.
+-- compact_step_with_limit returns Err("compaction_exhausted: ...") at >= 95%.
 pure func test_compaction_fires_above_70pct() -> bool
   tests [((), true)]
   {
-    let big_msg: Message = {
+    let big_msg: Msg = {
       role: "tool",
-      -- nested repeat: 340 * 100 = 34000 chars without tripping the recursion-depth cap
-      content: repeat(repeat("x", 100), 340),
+      content: repeat("x", 380),
       tool_calls: [],
       tool_call_id: "t"
     };
-    let user_msg: Message = {
+    let user_msg: Msg = {
       role: "user",
       content: "test",
       tool_calls: [],
       tool_call_id: ""
     };
-    match compact_step([user_msg, big_msg], "test/small") {
+    match compact_step_with_limit([user_msg, big_msg], "test/tiny", 100) {
       Err(_) => true,
       Ok(_)  => false
     }
@@ -54,7 +50,7 @@ pure func test_compaction_fires_above_70pct() -> bool
 -- A prose_step produces finish_reason="stop" — the loop-exit signal.
 -- A tool_step produces finish_reason="tool_calls" — the loop-recurse signal.
 -- terminal_step (empty script) also returns finish_reason="stop".
--- These invariants are what make run_v2_with_stub safe for integration tests:
+-- These invariants are what make run_v2_with_scripted_ports safe for integration tests:
 -- a scripted prose step terminates the loop without any LLM or tool calls.
 pure func test_pending_deny_path() -> bool
   tests [((), true)]

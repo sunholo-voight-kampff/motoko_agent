@@ -36,8 +36,8 @@ GO_MIN_MINOR=22
 BUN_MIN_MAJOR=1
 NODE_MIN_MAJOR=18
 OMNIGRAPH_MIN_VERSION="0.3.0"
-AILANG_REF="v0.24.2"
-AILANG_MIN_VERSION="0.24.2"
+AILANG_REF="v0.33.0"
+AILANG_MIN_VERSION="0.33.0"
 DUCKDB_VERSION="1.1.3"
 INSTALL_OMNIGRAPH=0
 INSTALL_LEAN=0
@@ -264,6 +264,17 @@ ensure_user_local_bin_on_path() {
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.profile"
   fi
   export PATH="$HOME/.local/bin:$PATH"
+  # GitHub Actions gives every `run:` step a fresh non-interactive shell, which
+  # reads neither .bashrc nor .profile, so the two lines above reach nothing but
+  # the rest of THIS process. $GITHUB_PATH is the only channel that carries a
+  # PATH entry to the next step; without it a workflow that installs the
+  # toolchain here and calls `ailang` in a later step fails instantly with
+  # "command not found" while the install step reports success.
+  if [[ -n "${GITHUB_PATH:-}" ]]; then
+    if ! grep -qxF "$HOME/.local/bin" "$GITHUB_PATH" 2>/dev/null; then
+      echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+    fi
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -316,6 +327,25 @@ PY
   log_info "Installing polars with pip for the current user..."
   python3 -m pip install --user --break-system-packages polars
   log_ok "polars installed"
+}
+
+chdb_ok() {
+  python3 - <<'PY' >/dev/null 2>&1
+import chdb
+PY
+}
+
+install_chdb() {
+  log_header "chDB embedded ClickHouse"
+
+  if chdb_ok; then
+    log_ok "chDB already installed"
+    return
+  fi
+
+  log_info "Installing chDB with pip for the current user (~712 MB installed footprint)..."
+  python3 -m pip install --user --break-system-packages chdb
+  log_ok "chDB installed"
 }
 
 # ---------------------------------------------------------------------------
@@ -695,6 +725,7 @@ main() {
   if [[ "$OS" == "debian" ]]; then
     install_python_data_science_packages
   fi
+  install_chdb
   install_context_mode
   install_bun_deps
   install_ailang
