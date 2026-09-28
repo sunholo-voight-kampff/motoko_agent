@@ -231,5 +231,12 @@ export func register_with_config(_cfg: a) -> ExtRegistration ! {Env, FS} {
     Err(_) => jo([]),
     Ok(text) => match decode(text) { Err(_) => jo([]), Ok(j) => j }
   };
-  { config: cfg, caps: [ToolProvider(["WriteFile", "EditFile", "ReadFile"], ailang_tools_handle)] }
+  -- "enabled": false registers no capability at all, so a before/after run can
+  -- switch the extension off from the profile without changing extensions.order.
+  let enabled = match get(cfg, "enabled") {
+    None => true,
+    Some(j) => match asBool(j) { None => true, Some(b) => b }
+  };
+  if enabled then { config: cfg, caps: [ToolProvider(["WriteFile", "EditFile", "ReadFile"], ailang_tools_handle)] }
+  else { config: cfg, caps: [] }
 }
