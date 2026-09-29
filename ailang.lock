@@ -1,6 +1,6 @@
 {
   "ailang_version": "v0.47.2",
-  "generated_at": "2026-09-28T16:52:08.200545Z",
+  "generated_at": "2026-09-29T09:38:47.132763Z",
   "generator": "ailang lock v0.47.2",
   "packages": [
     {
@@ -134,7 +134,7 @@
     },
     {
       "ailang": ">=0.17.0",
-      "content_hash": "sha256:43eb70d94b6e4180d3535d8379e7f16707e399d1a7595cbc93464aca92dd829d",
+      "content_hash": "sha256:9a8e966048717f3e93b4dac2aa6e7e7c0a278d8c510953082f1d0f733fc155d6",
       "effects": [
         "AI",
         "Clock",
