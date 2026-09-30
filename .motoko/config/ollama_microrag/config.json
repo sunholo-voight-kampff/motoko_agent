@@ -10,7 +10,7 @@
     "semi_formal_verifier_mode": false,
     "system_prompt": "",
     "openai_base_url": "http://localhost:11434/v1",
-    "ai_options_json": "{\"enable_thinking\":false}"
+    "ai_options_json": ""
   },
   "backend": {
     "mode": "external_http",
