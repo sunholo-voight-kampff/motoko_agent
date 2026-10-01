@@ -9,8 +9,9 @@ module sunholo/motoko_ext_ailang_policy/lane
 -- examples-search.ts) so a pi-vs-motoko comparison compares harnesses, not
 -- tool vocabularies. The boundary is not here: every file, CLI and run request
 -- goes to `ailang policy-tool` / `ailang run --policy`, which decide.
-import std/json (Json, encode, jo, kv, js, get, asString)
+import std/json (Json, encode, jo, kv, js, get, asString, asArray, ja)
 import std/option (Option, Some, None)
+import std/result (Result, Ok, Err)
 import std/list (any)
 import std/string (startsWith, endsWith, split, join, length as str_length, substring)
 import pkg/sunholo/motoko_ext_abi/types (ToolSchema)
@@ -159,3 +160,50 @@ pure func test_paths() -> bool
   ] {
   resolve_in("/ws", "benchmark/solution.ail") == "/ws/benchmark/solution.ail" && resolve_in("/ws/", "a.ail") == "/ws/a.ail" && resolve_in("/ws", "/ws/a.ail") == "/ws/a.ail" && dir_of("/ws/benchmark/solution.ail") == "/ws/benchmark" && base_of("/ws/benchmark/solution.ail") == "solution.ail"
 }
+
+-- ailang_edit requests, one per edit. Accepts the lane shape {path, old_text,
+-- new_text} and motoko's native EditFile shape {path, edits: [{old, new}]}:
+-- models reach for the native shape (the 2026-10-01 lane A/B saw one run spend
+-- 95 of its 120 steps on "old_text is required" refusals). Each edit becomes
+-- one policy-tool edit request, applied in order by the caller. Neither shape
+-- is an error that names both, so the model can correct itself.
+export pure func edit_requests(args: Json) -> Result[[string], string] {
+  let path = arg(args, "path");
+  if arg(args, "old_text") != "" then Ok([edit_request(path, arg(args, "old_text"), arg(args, "new_text"))])
+  else match get(args, "edits") {
+    None => Err("ailang_edit needs {path, old_text, new_text} or {path, edits: [{old, new}, ...]}; got neither"),
+    Some(j) => match asArray(j) {
+      None => Err("ailang_edit: edits must be a list of {old, new}"),
+      Some(items) => edits_of(path, items)
+    }
+  }
+}
+
+pure func edit_request(path: string, old_text: string, new_text: string) -> string {
+  encode(jo([kv("op", js("edit")), kv("path", js(path)), kv("old_text", js(old_text)), kv("new_text", js(new_text))]))
+}
+
+pure func edits_of(path: string, items: [Json]) -> Result[[string], string] {
+  match items {
+    [] => Ok([]),
+    e :: rest => {
+      let old = if arg(e, "old") != "" then arg(e, "old") else arg(e, "old_text");
+      let new = if arg(e, "old") != "" then arg(e, "new") else arg(e, "new_text");
+      if old == "" then Err("ailang_edit: every edit needs old (and new)")
+      else match edits_of(path, rest) {
+        Err(m) => Err(m),
+        Ok(more) => Ok(edit_request(path, old, new) :: more)
+      }
+    }
+  }
+}
+
+pure func test_edit_requests() -> bool
+  tests [((), true)]
+  {
+    let lane = match edit_requests(jo([kv("path", js("a.ail")), kv("old_text", js("x")), kv("new_text", js("y"))])) { Ok([r]) => r == "{\"op\":\"edit\",\"path\":\"a.ail\",\"old_text\":\"x\",\"new_text\":\"y\"}", _ => false };
+    let native = match edit_requests(jo([kv("path", js("a.ail")), kv("edits", ja([jo([kv("old", js("a")), kv("new", js("b"))]), jo([kv("old", js("c")), kv("new", js("d"))])]))])) { Ok([_, _]) => true, _ => false };
+    let neither = match edit_requests(jo([kv("path", js("a.ail"))])) { Err(m) => m != "", Ok(_) => false };
+    lane && native && neither
+  }
+

@@ -1,6 +1,6 @@
 {
   "ailang_version": "v0.50.0-6-g021c46907-dirty",
-  "generated_at": "2026-10-01T14:33:28.497975Z",
+  "generated_at": "2026-10-01T15:32:17.811006Z",
   "generator": "ailang lock v0.50.0-6-g021c46907-dirty",
   "packages": [
     {
@@ -134,7 +134,7 @@
     },
     {
       "ailang": ">=0.17.0",
-      "content_hash": "sha256:c67c9ad70d9daf3564617a04febfde255f609bf23d9e7d6dd2497f3a750d5947",
+      "content_hash": "sha256:5dbc8bb784624ead60d8473f22cead5807bb366548053c3bd97bdac5ffb766c1",
       "effects": [
         "AI",
         "Clock",

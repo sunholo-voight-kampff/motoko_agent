@@ -32,7 +32,7 @@ import pkg/sunholo/motoko_ext_abi/types (
   Handled, Delegate, Deny, NoOpinion
 )
 import pkg/sunholo/motoko_ext_ailang_policy/lane (
-  lane_tools, is_lane_tool, refusal_for, lane_schemas, policy_request,
+  lane_tools, is_lane_tool, refusal_for, lane_schemas, policy_request, edit_requests,
   resolve_in, dir_of, base_of, lane_prompt
 )
 
@@ -121,6 +121,26 @@ pure func keep(lines: [string], q: string) -> [string] {
   }
 }
 
+-- ailang_edit: each edit through policy-tool in order; stop at the first
+-- response that is not ok and return it with the edit's position.
+func edit_call(policy: string, call: ToolCallEnvelope) -> string ! {Env, FS, Process} {
+  match edit_requests(call.arguments) {
+    Err(msg) => encode(jo([kv("ok", jb(false)), kv("refused", js(msg))])),
+    Ok(reqs) => apply_edits(policy, reqs, call.id, 1, "{\"ok\":true}")
+  }
+}
+
+func apply_edits(policy: string, reqs: [string], tag: string, n: int, last: string) -> string ! {Env, FS, Process} {
+  match reqs {
+    [] => last,
+    r :: rest => {
+      let resp = policy_call(policy, r, "${tag}:${show(n)}");
+      if contains(resp, "\"ok\":true") || contains(resp, "\"ok\": true") then apply_edits(policy, rest, tag, n + 1, resp)
+      else encode(jo([kv("ok", jb(false)), kv("failed_edit", jnum(intToFloat(n))), kv("response", js(resp))]))
+    }
+  }
+}
+
 func ok_result(call: ToolCallEnvelope, body: string) -> ToolResultEnvelope {
   { tool_call_id: call.id, tool: call.tool, exit_code: 0, stdout: body, stderr: "", metadata: jo([]) }
 }
@@ -131,6 +151,7 @@ func lane_handle(ctx: ProviderCtx, call: ToolCallEnvelope) -> ToolHandleDecision
   if not is_lane_tool(call.tool) then Delegate
   else if call.tool == "ailang_run" then Handled(ok_result(call, run_call(policy, root, call.arguments)))
   else if call.tool == "builtins_search" then Handled(ok_result(call, builtins_call(policy, call.arguments, call.id)))
+  else if call.tool == "ailang_edit" then Handled(ok_result(call, edit_call(policy, call)))
   else match policy_request(call.tool, call.arguments) {
     None => Delegate,
     Some(req) => Handled(ok_result(call, policy_call(policy, req, call.id)))
