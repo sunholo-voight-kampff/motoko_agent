@@ -1,0 +1,209 @@
+module sunholo/motoko_ext_ailang_policy/register
+
+-- motoko_ext_ailang_policy: the ailang_only lane for motoko (extension ABI 8.0).
+-- Design: ailang repo design_docs/planned/m-motoko-ailang-only-lane.md.
+--
+--   * DescribeTools + ToolProvider: the eight lane tools (lane.ail), each a thin
+--     adapter. File, CLI and search requests go to `ailang policy-tool`
+--     (--request-file, because std/process.exec takes no stdin); ailang_run goes
+--     to `ailang run --policy --chdir <file's dir> <file>`, pi's semantics. The
+--     policy file decides; this extension holds no security logic.
+--   * ToolPolicy: an allowlist — every tool that is not a lane tool is Denied,
+--     native or from another extension. Verdicts merge Deny-first in motoko core.
+--   * PromptShaper: the lane prompt (what the model may and may not do).
+--   * Registration: only with a policy (AILANG_AGENT_POLICY) that policy-tool
+--     resolves as `restricted`. Otherwise it registers NOTHING, which a profile
+--     with extensions.strict = true refuses to start on (upstream #205), so a
+--     lane session can never run without this extension.
+
+import std/json (Json, encode, decode, jo, kv, js, jb, jnum, get, asString, asBool, asArray)
+import std/option (Option, Some, None)
+import std/result (Result, Ok, Err)
+import std/string (contains, split, join, toLower, length as str_length, substring)
+import std/process (exec)
+import std/fs (writeFileResult, removeFileResult, mkdirAllResult)
+import std/bytes (toString)
+import std/crypto (sha256Hex)
+import std/env (getEnvOr)
+import pkg/sunholo/motoko_ext_abi/types (
+  ExtRegistration, DescribeTools, PromptShaper, ToolPolicy, ToolProvider,
+  PureCtx, ProviderCtx, PromptPatch, ToolCallEnvelope, ToolResultEnvelope,
+  ToolHandleOutcome, ToolHandleDecision, ToolPolicyDecision, ToolSchema,
+  Handled, Delegate, Deny, NoOpinion
+)
+import pkg/sunholo/motoko_ext_ailang_policy/lane (
+  lane_tools, is_lane_tool, refusal_for, lane_schemas, policy_request,
+  resolve_in, dir_of, base_of, lane_prompt
+)
+
+pure func cfg_str(cfg: Json, key: string) -> string {
+  match get(cfg, key) {
+    None => "",
+    Some(j) => match asString(j) { None => "", Some(s) => s }
+  }
+}
+
+pure func arg(args: Json, key: string) -> string {
+  match get(args, key) {
+    None => "",
+    Some(j) => match asString(j) { None => "", Some(s) => s }
+  }
+}
+
+-- One request to `ailang policy-tool`, staged in a file (std/process.exec takes
+-- no stdin). Staged INSIDE the runtime's FS sandbox (AILANG_FS_SANDBOX, the
+-- workdir — writes elsewhere are refused), under .motoko/lane-requests/. The
+-- model can reach that directory through ailang_write, but rewriting a staged
+-- request only turns it into a different request that policy-tool checks
+-- against the same policy, so it gains nothing it could not ask for directly.
+func policy_call(policy: string, request: string, tag: string) -> string ! {Env, FS, Process} {
+  let base = getEnvOr("AILANG_FS_SANDBOX", getEnvOr("TMPDIR", "/tmp"));
+  let dir = "${base}/.motoko/lane-requests";
+  let _ = mkdirAllResult(dir);
+  let file = "${dir}/${substring(sha256Hex("${tag}:${request}"), 0, 24)}.json";
+  match writeFileResult(file, request) {
+    Err(msg) => encode(jo([kv("ok", jb(false)), kv("refused", js("could not stage the policy-tool request: ${msg}"))])),
+    Ok(_) => {
+      let out = exec("ailang", ["policy-tool", "--policy", policy, "--request-file", file]);
+      let _ = removeFileResult(file);
+      match out {
+        Err(_) => encode(jo([kv("ok", jb(false)), kv("refused", js("policy-tool could not start"))])),
+        Ok(o) => {
+          let text = toString(o.stdout);
+          if str_length(text) == 0 then encode(jo([kv("ok", jb(false)), kv("refused", js("policy-tool produced no response (exit ${show(o.exitCode)}): ${toString(o.stderr)}"))]))
+          else text
+        }
+      }
+    }
+  }
+}
+
+-- ailang_run: `ailang run --policy <p> --chdir <dir> <file>` (pi runs the file
+-- from its own directory). The gate refuses a file or --chdir outside the
+-- sandbox; we only build the argv.
+func run_call(policy: string, root: string, args: Json) -> string ! {Process} {
+  let abs = resolve_in(root, arg(args, "path"));
+  let extra = if arg(args, "args_json") == "" then [] else ["--args-json", arg(args, "args_json")];
+  match exec("ailang", ["run", "--policy", policy, "--chdir", dir_of(abs)] ++ extra ++ [base_of(abs)]) {
+    Err(_) => encode(jo([kv("admitted", jb(false)), kv("refused", js("ailang run could not start"))])),
+    Ok(o) => {
+      let err = toString(o.stderr);
+      let admitted = contains(err, "policy: {\"ok\":true");
+      encode(jo([
+        kv("admitted", jb(admitted)),
+        kv("exit_code", jnum(intToFloat(o.exitCode))),
+        kv("stdout", js(toString(o.stdout))),
+        kv("stderr", js(err))
+      ]))
+    }
+  }
+}
+
+-- builtins_search: list the builtins through policy-tool, keep the lines that
+-- contain the query (case-insensitive) — pi's ailang-lsp-lite filter.
+func builtins_call(policy: string, args: Json, tag: string) -> string ! {Env, FS, Process} {
+  let resp = policy_call(policy, encode(jo([kv("op", js("builtins_list"))])), tag);
+  match decode(resp) {
+    Err(_) => resp,
+    Ok(j) => {
+      let q = toLower(arg(args, "query"));
+      let lines = split(cfg_str(j, "stdout"), "\n");
+      let hits = keep(lines, q);
+      encode(jo([kv("ok", jb(true)), kv("matches", js(join("\n", hits)))]))
+    }
+  }
+}
+
+pure func keep(lines: [string], q: string) -> [string] {
+  match lines {
+    [] => [],
+    l :: rest => if q != "" && contains(toLower(l), q) then l :: keep(rest, q) else keep(rest, q)
+  }
+}
+
+func ok_result(call: ToolCallEnvelope, body: string) -> ToolResultEnvelope {
+  { tool_call_id: call.id, tool: call.tool, exit_code: 0, stdout: body, stderr: "", metadata: jo([]) }
+}
+
+func lane_handle(ctx: ProviderCtx, call: ToolCallEnvelope) -> ToolHandleDecision ! {Env, FS, Process} {
+  let policy = cfg_str(ctx.ext_config, "policy");
+  let root = cfg_str(ctx.ext_config, "root");
+  if not is_lane_tool(call.tool) then Delegate
+  else if call.tool == "ailang_run" then Handled(ok_result(call, run_call(policy, root, call.arguments)))
+  else if call.tool == "builtins_search" then Handled(ok_result(call, builtins_call(policy, call.arguments, call.id)))
+  else match policy_request(call.tool, call.arguments) {
+    None => Delegate,
+    Some(req) => Handled(ok_result(call, policy_call(policy, req, call.id)))
+  }
+}
+
+func ailang_policy_handle(ctx: ProviderCtx, call: ToolCallEnvelope) -> ToolHandleOutcome ! {IO, Process, FS, AI, Env, Net, SharedMem, Clock, Stream, Rand, Trace} {
+  { decision: lane_handle(ctx, call), next_state: ctx.world }
+}
+
+func ailang_policy_decide(_ctx: PureCtx, call: ToolCallEnvelope) -> ToolPolicyDecision {
+  match refusal_for(call.tool) {
+    None => NoOpinion,
+    Some(msg) => Deny(msg)
+  }
+}
+
+func ailang_policy_describe(cfg: Json) -> [ToolSchema] {
+  lane_schemas(cfg_str(cfg, "cli"))
+}
+
+func ailang_policy_prompt(ctx: PureCtx) -> PromptPatch {
+  { prepend: [lane_prompt(cfg_str(ctx.ext_config, "root"), cfg_str(ctx.ext_config, "caps"), cfg_str(ctx.ext_config, "cli"))], append: [] }
+}
+
+pure func strings_of(xs: [Json]) -> [string] {
+  match xs {
+    [] => [],
+    x :: rest => match asString(x) { None => strings_of(rest), Some(s) => s :: strings_of(rest) }
+  }
+}
+
+pure func list_field(j: Json, key: string) -> string {
+  match get(j, key) {
+    None => "",
+    Some(v) => match asArray(v) { None => "", Some(xs) => join(", ", strings_of(xs)) }
+  }
+}
+
+-- The resolved policy, or None when it is absent, unreadable or not restricted.
+func restricted_summary(policy: string) -> Option[Json] ! {Env, FS, Process} {
+  if policy == "" then None
+  else match decode(policy_call(policy, "{\"op\":\"summary\"}", "summary")) {
+    Err(_) => None,
+    Ok(resp) => {
+      let ok = match get(resp, "ok") { Some(b) => match asBool(b) { Some(v) => v, None => false }, None => false };
+      match get(resp, "summary") {
+        None => None,
+        Some(s) => if ok && cfg_str(s, "security_mode") == "restricted" && cfg_str(s, "fs_sandbox") != "" then Some(s) else None
+      }
+    }
+  }
+}
+
+export func register_with_config(_cfg: a) -> ExtRegistration ! {Env, FS, Process} {
+  let policy = getEnvOr("AILANG_AGENT_POLICY", "");
+  match restricted_summary(policy) {
+    -- No restricted policy: register nothing. Under extensions.strict the
+    -- session refuses to start; without strict the lane is simply absent.
+    None => { config: jo([]), caps: [] },
+    Some(s) => {
+      config: jo([
+        kv("policy", js(policy)),
+        kv("root", js(cfg_str(s, "fs_sandbox"))),
+        kv("caps", js(list_field(s, "caps"))),
+        kv("cli", js(list_field(s, "cli")))
+      ]),
+      caps: [
+        DescribeTools(ailang_policy_describe),
+        PromptShaper(ailang_policy_prompt),
+        ToolPolicy(ailang_policy_decide),
+        ToolProvider(lane_tools(), ailang_policy_handle)
+      ]
+    }
+  }
+}
