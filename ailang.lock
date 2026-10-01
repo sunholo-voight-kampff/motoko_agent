@@ -1,6 +1,6 @@
 {
   "ailang_version": "v0.50.0-6-g021c46907-dirty",
-  "generated_at": "2026-10-01T14:33:20.813696Z",
+  "generated_at": "2026-10-01T14:33:28.497975Z",
   "generator": "ailang lock v0.50.0-6-g021c46907-dirty",
   "packages": [
     {
@@ -131,6 +131,32 @@
       "path": "packages/motoko-ext-ailang-docs",
       "source": "path",
       "version": "0.1.4"
+    },
+    {
+      "ailang": ">=0.17.0",
+      "content_hash": "sha256:c67c9ad70d9daf3564617a04febfde255f609bf23d9e7d6dd2497f3a750d5947",
+      "effects": [
+        "AI",
+        "Clock",
+        "Env",
+        "FS",
+        "IO",
+        "Net",
+        "Process",
+        "Rand",
+        "SharedMem",
+        "Stream",
+        "Trace"
+      ],
+      "exports": [
+        "sunholo/motoko_ext_ailang_policy/lane",
+        "sunholo/motoko_ext_ailang_policy/register"
+      ],
+      "interface_hash": "sha256:eed19c1c2c12b7a7fc5fe431a7205b939c1624a01d1b334b22bf4bca47cdf55f",
+      "name": "sunholo/motoko_ext_ailang_policy",
+      "path": "packages/motoko-ext-ailang-policy",
+      "source": "path",
+      "version": "0.1.0"
     },
     {
       "ailang": ">=0.17.0",
