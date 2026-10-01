@@ -20,6 +20,7 @@ ailang = ">=0.33.0"
 "sunholo/motoko_ext_decision_framework" = { path = "packages/motoko-ext-decision-framework" }
 "sunholo/motoko_ext_microrag" = { path = "packages/motoko-ext-microrag" }
 "sunholo/motoko_ext_ailang_tools" = { path = "packages/motoko-ext-ailang-tools" }
+"sunholo/motoko_ext_ailang_policy" = { path = "packages/motoko-ext-ailang-policy" }
 "sunholo/motoko_ext_compaction_ai" = { path = "packages/motoko-ext-compaction-ai" }
 "sunholo/motoko_ext_ailang_docs" = { path = "packages/motoko-ext-ailang-docs" }
 "sunholo/motoko_ext_scratchpad" = { path = "packages/motoko_scratchpad" }
@@ -44,6 +45,7 @@ packages      = [
   "sunholo/motoko_ext_decision_framework@0.2.2",
   "sunholo/motoko_ext_microrag@0.4.2",
   "sunholo/motoko_ext_ailang_tools@0.1.0",
+  "sunholo/motoko_ext_ailang_policy@0.1.0",
   "sunholo/motoko_ext_compaction_ai@0.3.0",
   "sunholo/motoko_ext_scratchpad@0.1.0",
   "sunholo/motoko_ext_compaction_structural@1.1.0",

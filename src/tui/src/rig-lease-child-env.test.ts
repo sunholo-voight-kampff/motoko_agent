@@ -23,6 +23,21 @@ afterEach(() => {
   fs.rmSync(workdir, { recursive: true, force: true });
 });
 
+describe("buildChildEnv forwards the ailang_only lane policy", () => {
+  it("carries AILANG_AGENT_POLICY when set, and nothing when not", () => {
+    const saved = process.env.AILANG_AGENT_POLICY;
+    try {
+      process.env.AILANG_AGENT_POLICY = "/run/lane/agent-policy.toml";
+      expect(buildChildEnv(workdir, "someprofile", "", "").AILANG_AGENT_POLICY).toBe("/run/lane/agent-policy.toml");
+      delete process.env.AILANG_AGENT_POLICY;
+      expect("AILANG_AGENT_POLICY" in buildChildEnv(workdir, "someprofile", "", "")).toBe(false);
+    } finally {
+      if (saved === undefined) delete process.env.AILANG_AGENT_POLICY;
+      else process.env.AILANG_AGENT_POLICY = saved;
+    }
+  });
+});
+
 describe("buildChildEnv forwards the rig lease", () => {
   it("carries AILANG_RIG_LEASE when the parent holds one", () => {
     process.env.AILANG_RIG_LEASE = "0123456789abcdef0123456789abcdef";

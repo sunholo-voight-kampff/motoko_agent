@@ -1,0 +1,19 @@
+[package]
+name = "sunholo/motoko_ext_ailang_policy"
+version = "0.1.0"
+edition = "1"
+ailang = ">=0.17.0"
+description = "The ailang_only lane for motoko: the eight lane tools through `ailang policy-tool` / `ailang run --policy`, every other tool denied, and no registration without a restricted policy."
+license = "Apache-2.0"
+
+[exports]
+modules = ["sunholo/motoko_ext_ailang_policy/register", "sunholo/motoko_ext_ailang_policy/lane"]
+
+[dependencies]
+"sunholo/motoko_ext_abi" = { path = "../motoko-ext-abi", version = "8.0" }
+
+[effects]
+max = ["IO", "Process", "FS", "AI", "Env", "Net", "SharedMem", "Clock", "Stream", "Rand", "Trace"]
+
+[stability]
+level = "experimental"
