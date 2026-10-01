@@ -2,7 +2,7 @@
   "agent": {
     "model": "openrouter/deepseek/deepseek-v4-flash",
     "workdir": ".",
-    "max_steps": 120,
+    "max_steps": 300,
     "max_cost_usd_cents": 200,
     "step_delay_ms": 0,
     "max_retries": 3,
