@@ -604,6 +604,16 @@ export function buildChildEnv(
   if (process.env.AILANG_RIG_LEASE) {
     childEnv.AILANG_RIG_LEASE = process.env.AILANG_RIG_LEASE;
   }
+  // The ailang_only lane's program policy, forwarded only when present.
+  //
+  // motoko_ext_ailang_policy reads AILANG_AGENT_POLICY in register_with_config
+  // (the AILANG runtime, a child of this process). This is an allowlist: without
+  // the forward the extension sees no policy and registers nothing, and a lane
+  // profile with extensions.strict refuses to start — fail-closed, but never
+  // usable. The launcher writes the file read-only outside the workspace.
+  if (process.env.AILANG_AGENT_POLICY) {
+    childEnv.AILANG_AGENT_POLICY = process.env.AILANG_AGENT_POLICY;
+  }
   if (process.env.MOTOKO_OTEL && process.env.MOTOKO_OTEL.trim() !== "") {
     childEnv.MOTOKO_OTEL = process.env.MOTOKO_OTEL;
     childEnv.OTEL_EXPORTER_OTLP_ENDPOINT =

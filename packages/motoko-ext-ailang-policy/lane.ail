@@ -1,0 +1,161 @@
+module sunholo/motoko_ext_ailang_policy/lane
+
+-- The pure half of the ailang_only lane: tool names and schemas, the allowlist
+-- decision, request building and the lane prompt. Everything that touches a
+-- process or a file is in register.ail.
+--
+-- The tool names, argument shapes and prompt mirror the pi lane
+-- (ailang repo: .pi/extensions/ailang-exec.ts, ailang-lsp-lite.ts,
+-- examples-search.ts) so a pi-vs-motoko comparison compares harnesses, not
+-- tool vocabularies. The boundary is not here: every file, CLI and run request
+-- goes to `ailang policy-tool` / `ailang run --policy`, which decide.
+import std/json (Json, encode, jo, kv, js, get, asString)
+import std/option (Option, Some, None)
+import std/list (any)
+import std/string (startsWith, endsWith, split, join, length as str_length, substring)
+import pkg/sunholo/motoko_ext_abi/types (ToolSchema)
+
+export pure func lane_tools() -> [string] {
+  ["ailang_read", "ailang_write", "ailang_edit", "ailang_check", "ailang_run", "ailang_cli", "builtins_search", "examples_search"]
+}
+
+export pure func is_lane_tool(name: string) -> bool {
+  any(\t. t == name, lane_tools())
+}
+
+-- Allowlist, not denylist: a tool this lane does not provide is refused,
+-- whichever extension or native catalogue it came from.
+export pure func refusal_for(name: string) -> Option[string] {
+  if is_lane_tool(name) then None else Some("ailang_only lane: '${name}' is disabled — there is no shell and no native file access. Use ailang_read / ailang_write / ailang_edit / ailang_check / ailang_run / ailang_cli / builtins_search / examples_search.")
+}
+
+pure func str_prop(name: string, desc: string) -> string {
+  "\"${name}\": {\"type\": \"string\", \"description\": \"${desc}\"}"
+}
+
+pure func obj(props: [string], required: [string]) -> string {
+  let req = join(", ", map_quote(required))
+  "{\"type\": \"object\", \"properties\": {${join(", ", props)}}, \"required\": [${req}]}"
+}
+
+pure func map_quote(xs: [string]) -> [string] {
+  match xs {
+    [] => [],
+    x :: rest => "\"${x}\"" :: map_quote(rest)
+  }
+}
+
+export pure func lane_schemas(cli_ops: string) -> [ToolSchema] {
+  [{ name: "ailang_read", description: "Read a file inside the policy's FS sandbox. Paths resolve from the sandbox root; anything outside it, including symlinks that lead outside, is refused. Returns {ok, content} or {ok:false, refused}.", parameters: obj([str_prop("path", "File path, relative to the sandbox root (or absolute inside it)")], ["path"]) }, { name: "ailang_write", description: "Create or overwrite a file inside the policy's FS sandbox. Refused outside it. Returns {ok} or {ok:false, refused}.", parameters: obj([str_prop("path", "File path, relative to the sandbox root"), str_prop("content", "The complete new file content")], ["path", "content"]) }, { name: "ailang_edit", description: "Replace old_text with new_text in a file inside the sandbox; old_text must occur exactly once (include enough context). Returns {ok} or {ok:false, refused}.", parameters: obj([str_prop("path", "File path, relative to the sandbox root"), str_prop("old_text", "Exact text to replace (must occur exactly once)"), str_prop("new_text", "Replacement text")], ["path", "old_text", "new_text"]) }, { name: "ailang_check", description: "Type-check an AILANG file inside the sandbox (`ailang check`). Returns {ok, exit_code, stdout, stderr} or {ok:false, refused}.", parameters: obj([str_prop("path", "The .ail file, relative to the sandbox root")], ["path"]) }, { name: "ailang_run", description: "Execute an AILANG program under the operator's policy: `ailang run --policy <policy>` in the file's directory. The program's declared effect row must be a subset of the policy's allowed_caps; FS stays inside the sandbox; the run is bounded by the policy's timeout. Returns {admitted, exit_code, stdout, stderr}. A denial names missing_from_policy: narrow the program's effects. This is the ONLY way to run code; there is no shell.", parameters: obj([str_prop("path", "Path to the .ail file, relative to the sandbox root"), str_prop("args_json", "Optional JSON arguments for the entrypoint (passed as --args-json)")], ["path"]) }, { name: "ailang_cli", description: "Run an allowlisted ailang operation as a typed request. ops under this policy: ${cli_ops}. Field by op — check/ai_check/fmt/tree/policy_check: {path}; iface/pkg_docs: {module}; docs_search/examples_search: {query}; examples_show/builtins_show: {module: <name>}; test: {path?, package?}. NOT run: execution only goes through ailang_run. Returns {ok, argv, exit_code, stdout, stderr} or {ok:false, refused}.", parameters: obj([str_prop("op", "The operation, e.g. check, iface, docs_search, test"), str_prop("path", "In-sandbox file path (check, ai_check, fmt, tree, policy_check, test)"), str_prop("module", "Module path or name (iface: std/fs; examples_show/builtins_show: a name)"), str_prop("query", "Search text (docs_search, examples_search)"), str_prop("package", "Package directory for test (in-sandbox)")], ["op"]) }, { name: "builtins_search", description: "Search the AILANG builtin/std function inventory by name or text (listDir, readFile, split, ...) instead of guessing a function name. Returns the matching lines.", parameters: obj([str_prop("query", "Text to match against builtin names and signatures")], ["query"]) }, { name: "examples_search", description: "Find working AILANG examples whose text contains the query, before writing a construct you are unsure of.", parameters: obj([str_prop("query", "Text to search the examples for")], ["query"]) }]
+}
+
+pure func arg(args: Json, key: string) -> string {
+  match get(args, key) {
+    None => "",
+    Some(j) => match asString(j) {
+      None => "",
+      Some(s) => s
+    }
+  }
+}
+
+pure func field(key: string, v: string) -> [{ key: string, value: Json }] {
+  if v == "" then [] else [kv(key, js(v))]
+}
+
+-- The policy-tool request for a lane call. ailang_run and builtins_search are
+-- not plain requests (run goes to `ailang run --policy`; builtins_search lists
+-- and filters), so they return None here.
+export pure func policy_request(tool: string, args: Json) -> Option[string] {
+  if tool == "ailang_read" then Some(encode(jo([kv("op", js("read")), kv("path", js(arg(args, "path")))]))) else if tool == "ailang_write" then Some(encode(jo([kv("op", js("write")), kv("path", js(arg(args, "path"))), kv("content", js(arg(args, "content")))]))) else if tool == "ailang_edit" then Some(encode(jo([kv("op", js("edit")), kv("path", js(arg(args, "path"))), kv("old_text", js(arg(args, "old_text"))), kv("new_text", js(arg(args, "new_text")))]))) else if tool == "ailang_check" then Some(encode(jo([kv("op", js("check")), kv("path", js(arg(args, "path")))]))) else if tool == "examples_search" then Some(encode(jo([kv("op", js("examples_search")), kv("query", js(arg(args, "query")))]))) else if tool == "ailang_cli" then Some(encode(jo([kv("op", js(arg(args, "op")))] ++ field("path", arg(args, "path")) ++ field("module", arg(args, "module")) ++ field("query", arg(args, "query")) ++ field("package", arg(args, "package"))))) else None
+}
+
+-- A lane path is relative to the sandbox root (or absolute inside it). The
+-- authority on "inside" is `ailang run --policy`; this only builds the path.
+export pure func resolve_in(root: string, path: string) -> string {
+  if startsWith(path, "/") then path else if endsWith(root, "/") then "${root}${path}" else "${root}/${path}"
+}
+
+export pure func dir_of(path: string) -> string {
+  let parts = split(path, "/")
+  let n = list_len(parts)
+  if n <= 1 then "." else substring(path, 0, str_length(path) - str_length(last(parts)) - 1)
+}
+
+export pure func base_of(path: string) -> string {
+  last(split(path, "/"))
+}
+
+pure func last(xs: [string]) -> string {
+  match xs {
+    [] => "",
+    [x] => x,
+    _ :: rest => last(rest)
+  }
+}
+
+pure func list_len(xs: [string]) -> int {
+  match xs {
+    [] => 0,
+    _ :: rest => 1 + list_len(rest)
+  }
+}
+
+export pure func lane_prompt(root: string, caps: string, cli_ops: string) -> string {
+  join("\n", ["## Execution lane: ailang_only", "You have NO shell. Your tools are ailang_read, ailang_edit, ailang_write, ailang_check, ailang_run, builtins_search, examples_search and ailang_cli — nothing else. The native tools (ReadFile, WriteFile, EditFile, BashExec, RunTests, Search) are disabled and every call to them is refused. Use builtins_search({query}) to discover std functions instead of guessing. Use examples_search({query}) to find a working example before writing a construct you are unsure of. Use ailang_cli({op: \"iface\", module: \"std/fs\"}) for exact signatures of a module's exports.", "The ONLY way to execute anything is ailang_run on an AILANG (.ail) file you have written. Do not ask for bash: write the program, ailang_check it, then ailang_run it.", "Module naming: ailang_run runs a file from its own directory, so a file named report.ail starts with `module report` (the bare file name).", "Paths: every path you give a tool resolves against the FS SANDBOX ROOT ${root}. Paths outside it — including symlinks that lead outside — are refused.", "Every effect a program uses must be declared in its entry function's effect row (`! {IO, FS}`); the gate admits the program only if the declared row is a subset of the policy: allowed effects = {${caps}}.", "ailang_cli ops available under this policy: ${cli_ops} — never run (use ailang_run).", "A denial names missing_from_policy: narrow the program's effects instead of retrying the same thing."])
+}
+
+-- Inline tests
+
+pure func test_allowlist() -> bool
+  tests [
+    ((), true)
+  ] {
+  let lane_ok = match refusal_for("ailang_run") {
+    None => true,
+    Some(_) => false
+  }
+  let bash_denied = match refusal_for("BashExec") {
+    None => false,
+    Some(_) => true
+  }
+  let write_denied = match refusal_for("WriteFile") {
+    None => false,
+    Some(_) => true
+  }
+  let foreign_denied = match refusal_for("Delegate") {
+    None => false,
+    Some(_) => true
+  }
+  lane_ok && bash_denied && write_denied && foreign_denied
+}
+
+pure func test_requests() -> bool
+  tests [
+    ((), true)
+  ] {
+  let read = match policy_request("ailang_read", jo([kv("path", js("a.ail"))])) {
+    Some(r) => r == "{\"op\":\"read\",\"path\":\"a.ail\"}",
+    None => false
+  }
+  let run_none = match policy_request("ailang_run", jo([kv("path", js("a.ail"))])) {
+    None => true,
+    Some(_) => false
+  }
+  let bash_none = match policy_request("BashExec", jo([])) {
+    None => true,
+    Some(_) => false
+  }
+  let cli = match policy_request("ailang_cli", jo([kv("op", js("iface")), kv("module", js("std/fs"))])) {
+    Some(r) => r == "{\"op\":\"iface\",\"module\":\"std/fs\"}",
+    None => false
+  }
+  read && run_none && bash_none && cli
+}
+
+pure func test_paths() -> bool
+  tests [
+    ((), true)
+  ] {
+  resolve_in("/ws", "benchmark/solution.ail") == "/ws/benchmark/solution.ail" && resolve_in("/ws/", "a.ail") == "/ws/a.ail" && resolve_in("/ws", "/ws/a.ail") == "/ws/a.ail" && dir_of("/ws/benchmark/solution.ail") == "/ws/benchmark" && base_of("/ws/benchmark/solution.ail") == "solution.ail"
+}
