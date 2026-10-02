@@ -64,7 +64,7 @@ func inside_workdir(workdir: string, path: string) -> bool ! {Process} {
   if any(\seg. seg == "..", split(path, "/")) then false
   else {
     let dir = if workdir == "" then "." else workdir;
-    let guard = "set -eu\nwd=$(realpath \"$1\")\ncase \"$2\" in /*) joined=\"$2\" ;; *) joined=\"$wd/$2\" ;; esac\ntarget=$(realpath -m \"$joined\")\ncase \"$target\" in \"$wd\"/*) ;; *) exit 43 ;; esac\n";
+    let guard = "set -eu\nwd=$(realpath \"$1\")\ncase \"$2\" in /*) joined=\"$2\" ;; *) joined=\"$wd/$2\" ;; esac\np=\"$joined\"\nrest=\"\"\nwhile [ ! -e \"$p\" ]; do\n  if [ -L \"$p\" ]; then exit 44; fi\n  rest=\"/$(basename \"$p\")$rest\"\n  p=$(dirname \"$p\")\ndone\ntarget=\"$(realpath \"$p\")$rest\"\ncase \"$target\" in \"$wd\"/*) ;; *) exit 43 ;; esac\n";
     match exec("bash", ["-c", guard, "ailang_tools_path_guard", dir, path]) {
       Err(_) => false,
       Ok(out) => out.exitCode == 0
