@@ -45,7 +45,7 @@
       "ailang_tools",
       "microrag"
     ],
-    "strict": false
+    "strict": true
   },
   "verification": {
     "enabled": true,
