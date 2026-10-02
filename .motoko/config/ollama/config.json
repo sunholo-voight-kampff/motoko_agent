@@ -32,7 +32,7 @@
   },
   "extensions": {
     "order": ["compaction_ai", "context_mode"],
-    "strict": false
+    "strict": true
   },
   "verification": {}
 }

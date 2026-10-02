@@ -43,9 +43,10 @@
       "compaction_ai",
       "context_mode",
       "ailang_docs",
+      "ailang_tools",
       "microrag"
     ],
-    "strict": false
+    "strict": true
   },
   "verification": {
     "enabled": true,

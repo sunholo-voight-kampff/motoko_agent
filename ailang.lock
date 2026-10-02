@@ -1,7 +1,7 @@
 {
-  "ailang_version": "v0.47.2",
-  "generated_at": "2026-10-01T15:11:17.274069595Z",
-  "generator": "ailang lock v0.47.2",
+  "ailang_version": "v0.51.0-29-g078463551-dirty",
+  "generated_at": "2026-10-02T18:18:48.120218Z",
+  "generator": "ailang lock v0.51.0-29-g078463551-dirty",
   "packages": [
     {
       "ailang": ">=0.9.2",
@@ -134,7 +134,33 @@
     },
     {
       "ailang": ">=0.17.0",
-      "content_hash": "sha256:b1ff87d1905b095050d5e47e85fcd36bbfe91d4ac7d1390f3fe21e54d969e85b",
+      "content_hash": "sha256:5dbc8bb784624ead60d8473f22cead5807bb366548053c3bd97bdac5ffb766c1",
+      "effects": [
+        "AI",
+        "Clock",
+        "Env",
+        "FS",
+        "IO",
+        "Net",
+        "Process",
+        "Rand",
+        "SharedMem",
+        "Stream",
+        "Trace"
+      ],
+      "exports": [
+        "sunholo/motoko_ext_ailang_policy/lane",
+        "sunholo/motoko_ext_ailang_policy/register"
+      ],
+      "interface_hash": "sha256:eed19c1c2c12b7a7fc5fe431a7205b939c1624a01d1b334b22bf4bca47cdf55f",
+      "name": "sunholo/motoko_ext_ailang_policy",
+      "path": "packages/motoko-ext-ailang-policy",
+      "source": "path",
+      "version": "0.1.0"
+    },
+    {
+      "ailang": ">=0.17.0",
+      "content_hash": "sha256:47bbc7554ae219ec3c4de302a02f813852a3cf3c040ed9f1657711fc44ceb36f",
       "effects": [
         "AI",
         "Clock",
@@ -561,7 +587,7 @@
     },
     {
       "ailang": ">=0.17.0",
-      "content_hash": "sha256:a92f8dbd1f7d0c071c59c43b5171262fe14af23b07efc7f053eaa9fbce0a4038",
+      "content_hash": "sha256:67eca8186f781cd4ff85aa4a0ea0053cb0454821d11acf1aada9241d1c6d41aa",
       "effects": [
         "Env",
         "Process"
