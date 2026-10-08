@@ -1,5 +1,6 @@
 {
   "agent": {
+    "context_limit": 262144,
     "model": "ollama/qwen3.8:27b-mxfp8",
     "workdir": ".",
     "max_steps": 120,

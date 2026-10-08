@@ -1,5 +1,5 @@
 {
-  "agent": {    
+  "agent": { "context_limit": 262144,    
     "model": "openrouter/deepseek/deepseek-v4-pro",
     "workdir": ".",
     "max_steps": 600,
