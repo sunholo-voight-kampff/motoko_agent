@@ -572,6 +572,10 @@ export function buildChildEnv(
     // `sessionIdentity()` honours an inherited MOTOKO_SESSION_ID, which is what the eval-harness
     // adapter sets and what a `--resume` of an existing session needs.
     MOTOKO_SESSION_ID: sessionIdentity(),
+    // OpenRouter session affinity (AILANG ≥ the release after v0.54.6 sends it as
+    // x-session-id): one session stays on one upstream host. Without it OpenRouter
+    // load-balanced a single session across three GLM hosts (2026-10-12).
+    OPENROUTER_SESSION_ID: process.env.OPENROUTER_SESSION_ID ?? sessionIdentity(),
     // THE RESUME COUNT, D5 again: `0` on a fresh spawn, incremented on every `--resume` spawn. The
     // child reads it AMBIENTLY in `rpc.run_with_config` (`rpc.ail:217`) rather than through a
     // `ports.env_get`, because five DST fixtures pin the exact key set the policy init reads and a

@@ -39,3 +39,14 @@ describe("buildChildEnv forwards the cost-cap rates", () => {
     KEYS.forEach((k, i) => expect(env[k]).toBe(String(1000 * (i + 1))));
   });
 });
+
+describe("buildChildEnv carries an OpenRouter session id", () => {
+  it("defaults to the motoko session identity", () => {
+    const saved = process.env.OPENROUTER_SESSION_ID;
+    delete process.env.OPENROUTER_SESSION_ID;
+    const env = buildChildEnv(workdir, "default", "", "");
+    expect(env.OPENROUTER_SESSION_ID).toBe(env.MOTOKO_SESSION_ID);
+    expect((env.OPENROUTER_SESSION_ID ?? "").length).toBeGreaterThan(0);
+    if (saved !== undefined) process.env.OPENROUTER_SESSION_ID = saved;
+  });
+});
