@@ -13,7 +13,7 @@ import std/json (Json, encode, jo, kv, js, get, asString, asArray, ja)
 import std/option (Option, Some, None)
 import std/result (Result, Ok, Err)
 import std/list (any)
-import std/string (startsWith, endsWith, split, join, length as str_length, substring)
+import std/string (startsWith, endsWith, split, join, length as str_length, substring, contains)
 import pkg/sunholo/motoko_ext_abi/types (ToolSchema)
 
 export pure func lane_tools() -> [string] {
@@ -103,10 +103,33 @@ pure func list_len(xs: [string]) -> int {
 }
 
 export pure func lane_prompt(root: string, caps: string, cli_ops: string) -> string {
-  join("\n", ["## Execution lane: ailang_only", "You have NO shell. Your tools are ailang_read, ailang_edit, ailang_write, ailang_check, ailang_run, builtins_search, examples_search and ailang_cli — nothing else. The native tools (ReadFile, WriteFile, EditFile, BashExec, RunTests, Search) are disabled and every call to them is refused. Use builtins_search({query}) to discover std functions instead of guessing. Use examples_search({query}) to find a working example before writing a construct you are unsure of. Use ailang_cli({op: \"iface\", module: \"std/fs\"}) for exact signatures of a module's exports.", "The ONLY way to execute anything is ailang_run on an AILANG (.ail) file you have written. Do not ask for bash: write the program, ailang_check it, then ailang_run it.", "Module naming: ailang_run runs a file from its own directory, so a file named report.ail starts with `module report` (the bare file name).", "Paths: every path you give a tool resolves against the FS SANDBOX ROOT ${root}. Paths outside it — including symlinks that lead outside — are refused.", "Every effect a program uses must be declared in its entry function's effect row (`! {IO, FS}`); the gate admits the program only if the declared row is a subset of the policy: allowed effects = {${caps}}.", "ailang_cli ops available under this policy: ${cli_ops} — never run (use ailang_run).", "A denial names missing_from_policy: narrow the program's effects instead of retrying the same thing."])
+  let has = \c. any(\x. x == c, split(caps, ", "));
+  let net = if has("Net") || has("Stream") then "Net is limited to the policy's allowed hosts; redirects to other hosts are refused." else "There is no network access. Do not attempt HTTP.";
+  let proc = if has("Process") then "Process is limited to the policy's allowed commands." else "There is no process/subprocess access.";
+  join("\n", ["## Execution lane: ailang_only", "You have NO shell. Your tools are ailang_read, ailang_edit, ailang_write, ailang_check, ailang_run, builtins_search, examples_search and ailang_cli — nothing else. The native tools (ReadFile, WriteFile, EditFile, BashExec, RunTests, Search) are disabled and every call to them is refused. Use builtins_search({query}) to discover std functions (listDir, readFile, split, …) instead of guessing. Use examples_search({query}) to find a working example before writing a construct you are unsure of. Use ailang_cli({op: \"iface\", module: \"std/fs\"}) for exact signatures of a module's exports before calling them. ailang_read on a directory lists it.", "Package ceilings: a directory with an ailang.toml is a PACKAGE, and its `[effects] max` ceiling applies to EVERY module inside it — a probe program that reads files or runs git will be rejected there (`effect ceiling violation in package …`) no matter what the policy allows. Write scratch/probe programs in `.ailang-scratch/` at the sandbox root — never inside a package directory, and never anywhere else: that one directory is excluded from the commit, and you have no delete tool, so a probe left elsewhere ships in the PR. Only the package's own code goes inside the package. NEVER edit a package's `[effects] max` to make a probe or your own program pass — the ceiling is the package's public contract, and widening it is the change under review, not a workaround.", "Probes are for finding things out, not the deliverable: once you know where the change goes, make it in the real file with ailang_edit, then ailang_check and test it.", "The ONLY way to execute anything is ailang_run on an AILANG (.ail) file you have written. Do not ask for bash, do not describe commands you would run, do not stop after reading: write the program, ailang_check it, then ailang_run it.", "Module naming: a file named report.ail must start with `module report` (the bare file name — no directory prefix, no hyphens); ailang_run runs a file from its own directory.", "Paths: every path you give a tool, and every relative path in a program (readFile, listDir), resolves against the FS SANDBOX ROOT ${root}. Paths outside it — including symlinks that lead outside — are refused.", "Every effect a program uses must be declared in its entry function's effect row (`! {IO, FS}`); the typechecker enforces this through imports, and the gate admits the program only if the declared row is a subset of the policy: allowed effects = {${caps}}.", net, proc, "ailang_cli ops available under this policy: ${cli_ops} — never run (use ailang_run); test evaluates pure tests only.", "A denial names missing_from_policy: narrow the program's effects instead of retrying the same thing. Programs are ordinary AILANG modules with `export func main() -> () ! {…}`; use std/fs, std/io, std/string for what you would have done with shell tools."])
+}
+
+-- The canonical AILANG teaching prompt as a system-prompt section (pi's
+-- ailang-exec.ts teachingPrompt). Empty when the prompt is unavailable.
+export pure func teaching_section(teaching: string) -> string {
+  if teaching == "" then "" else "## AILANG language reference (canonical teaching prompt)\n\n${teaching}"
 }
 
 -- Inline tests
+
+-- The lane prompt carries pi's guidance (scratch dir, package ceilings, effects
+-- by policy), and the teaching section is present only when there is teaching.
+pure func test_lane_prompt() -> bool
+  tests [
+    ((), true)
+  ] {
+  let p = lane_prompt("/sb", "IO, FS", "check, iface");
+  let q = lane_prompt("/sb", "IO, FS, Net, Process", "check");
+  contains(p, ".ailang-scratch/") && contains(p, "/sb") && contains(p, "There is no network access")
+    && contains(p, "There is no process/subprocess access") && contains(p, "make it in the real file")
+    && not contains(q, "There is no network access") && not contains(q, "There is no process")
+    && teaching_section("") == "" && contains(teaching_section("T"), "AILANG language reference")
+}
 
 pure func test_allowlist() -> bool
   tests [
