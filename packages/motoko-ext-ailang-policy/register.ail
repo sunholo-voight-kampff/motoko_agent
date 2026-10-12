@@ -33,7 +33,7 @@ import pkg/sunholo/motoko_ext_abi/types (
 )
 import pkg/sunholo/motoko_ext_ailang_policy/lane (
   lane_tools, is_lane_tool, refusal_for, lane_schemas, policy_request, edit_requests,
-  resolve_in, dir_of, base_of, lane_prompt
+  resolve_in, dir_of, base_of, lane_prompt, teaching_section
 )
 
 pure func cfg_str(cfg: Json, key: string) -> string {
@@ -174,7 +174,24 @@ func ailang_policy_describe(cfg: Json) -> [ToolSchema] {
 }
 
 func ailang_policy_prompt(ctx: PureCtx) -> PromptPatch {
-  { prepend: [lane_prompt(cfg_str(ctx.ext_config, "root"), cfg_str(ctx.ext_config, "caps"), cfg_str(ctx.ext_config, "cli"))], append: [] }
+  let lane = lane_prompt(cfg_str(ctx.ext_config, "root"), cfg_str(ctx.ext_config, "caps"), cfg_str(ctx.ext_config, "cli"));
+  let teaching = teaching_section(cfg_str(ctx.ext_config, "teaching"));
+  { prepend: if teaching == "" then [lane] else [lane, teaching], append: [] }
+}
+
+-- The canonical teaching prompt (`ailang prompt`, the ACTIVE version — never a
+-- written-down copy), read once at registration. An ailang_only agent has to
+-- write AILANG and nothing else, and on the coordinator path nothing else
+-- teaches it. Measured 2026-10-12: without it the lane's system role was 1,783
+-- chars against pi's ~23k-token teaching section, and motoko spent real tasks
+-- building probe tools instead of editing the target. AILANG_LANE_TEACHING=0
+-- turns it off (pi's switch); "" when `ailang prompt` fails.
+func teaching_prompt() -> string ! {Env, Process} {
+  if getEnvOr("AILANG_LANE_TEACHING", "1") == "0" then ""
+  else match exec("ailang", ["prompt"]) {
+    Err(_) => "",
+    Ok(o) => if o.exitCode == 0 then toString(o.stdout) else ""
+  }
 }
 
 pure func strings_of(xs: [Json]) -> [string] {
@@ -217,7 +234,8 @@ export func register_with_config(_cfg: a) -> ExtRegistration ! {Env, FS, Process
         kv("policy", js(policy)),
         kv("root", js(cfg_str(s, "fs_sandbox"))),
         kv("caps", js(list_field(s, "caps"))),
-        kv("cli", js(list_field(s, "cli")))
+        kv("cli", js(list_field(s, "cli"))),
+        kv("teaching", js(teaching_prompt()))
       ]),
       caps: [
         DescribeTools(ailang_policy_describe),
