@@ -50,3 +50,29 @@ describe("buildChildEnv carries an OpenRouter session id", () => {
     if (saved !== undefined) process.env.OPENROUTER_SESSION_ID = saved;
   });
 });
+
+// The ollama streaming switch and its windows reach the runtime. A dropped flag
+// fails silently: the runtime takes the buffered path and the host sees no
+// progress until the whole generation returns.
+describe("buildChildEnv forwards the ollama streaming settings", () => {
+  const STREAM_KEYS = [
+    "AILANG_OLLAMA_V1_STREAM",
+    "AILANG_OLLAMA_IDLE_TIMEOUT_SEC",
+    "AILANG_OLLAMA_TTFT_TIMEOUT_SEC",
+  ] as const;
+  it("carries the flag and both windows", () => {
+    const prev: Record<string, string | undefined> = {};
+    for (const k of STREAM_KEYS) prev[k] = process.env[k];
+    process.env.AILANG_OLLAMA_V1_STREAM = "1";
+    process.env.AILANG_OLLAMA_IDLE_TIMEOUT_SEC = "120";
+    process.env.AILANG_OLLAMA_TTFT_TIMEOUT_SEC = "600";
+    const env = buildChildEnv(workdir, "default", "", "");
+    expect(env.AILANG_OLLAMA_V1_STREAM).toBe("1");
+    expect(env.AILANG_OLLAMA_IDLE_TIMEOUT_SEC).toBe("120");
+    expect(env.AILANG_OLLAMA_TTFT_TIMEOUT_SEC).toBe("600");
+    for (const k of STREAM_KEYS) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+  });
+});
