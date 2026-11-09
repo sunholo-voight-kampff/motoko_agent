@@ -1862,7 +1862,7 @@ export func world_tool(state: WorldState, inv: ToolInvocation) -> ToolExecution 
 -- one place it would be least visible: both compile, both return a
 -- `ToolCompleted`, and the drift shows up only as one seam binding an exit code
 -- the other does not.
-pure func live_tool_outcome(inv: ToolInvocation) -> ToolOutcome ! {IO, Process, FS} {
+func live_tool_outcome(inv: ToolInvocation) -> ToolOutcome ! {IO, Process, FS} {
   let d = dispatch_one_typed(inv.workdir, envelope_to_call(inv.call));
   ToolCompleted({ tool_call_id: inv.call.id, content: d.content, exit_code: d.exit_code })
 }
