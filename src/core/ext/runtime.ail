@@ -288,6 +288,7 @@ pure func entry_base(ctx: ExtCtx, e: ExtEntry) -> PureCtx {
 -- atom's two callbacks are handed (P1.4r, below).
 -- ============================================================================
 export type DecisionSite = FinalizeSite | ToolPolicySite
+  deriving (Eq)
 
 export type DecisionCursor = { ext_id: string, atom: int, site: DecisionSite, request: DecisionRequest }
 
