@@ -121,7 +121,8 @@ pure func has_adjacent_repeat(xs: [string]) -> bool {
     _ :: [] => false,
     a :: rest =>
       match rest {
-        b :: _ => if a == b then true else has_adjacent_repeat(rest)
+        b :: _ => if a == b then true else has_adjacent_repeat(rest),
+        [] => false
       }
   }
 }

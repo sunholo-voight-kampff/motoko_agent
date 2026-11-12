@@ -8,11 +8,11 @@ module src/core/test/scripted_ports
 import std/ai (Message, StepResult, ToolCall, AIError, StreamChunk)
 import std/json (jo)
 import std/list as List (length)
-import std/result (Result, Ok, Err)
+import std/result (Result, Ok, Err, unwrap)
 import std/trace as Trace
 import src/core/ports (ScriptedStep, ApprovalResolution, ApprovalAllowed, ApprovalDenied, Ports, ProviderExchange, WorldState, ports_shape_probe, virtual_clock, ToolOffer, AgentTools)
 import src/core/phase_vocab (ApprovalRequest, ExecNative)
-import src/core/test/stub_step (StepProvider, Scripted, ScriptedWorld, LiveAI, Ported, scripted_to_step_result, scripted_world_state, bounded_scripted_ports, scripted_provider_input_tokens)
+import src/core/test/stub_step (StepProvider, Scripted, ScriptedWorld, RecordingWorld, GeneratedWorld, PortedWorld, LiveAI, Ported, scripted_to_step_result, scripted_world_state, bounded_scripted_ports, scripted_provider_input_tokens)
 import src/core/config (CostRates, VerificationConfig)
 import pkg/sunholo/motoko_ext_abi/types (BudgetPlan, ExtRuntime)
 import src/core/session as Session
@@ -31,8 +31,19 @@ export pure func state_from_step_provider(provider: StepProvider) -> ScriptedPor
   match provider {
     Scripted(steps) => scripted_state(steps, [], []),
     LiveAI => scripted_state([], [], []),
-    Ported(_) => scripted_state([], [], [])
+    Ported(_) => scripted_state([], [], []),
+    ScriptedWorld(_) => no_scripted_state("ScriptedWorld"),
+    RecordingWorld(_) => no_scripted_state("RecordingWorld"),
+    GeneratedWorld(_) => no_scripted_state("GeneratedWorld"),
+    PortedWorld(_, _) => no_scripted_state("PortedWorld")
   }
+}
+
+-- A world provider carries no scripted steps: asking for its scripted state
+-- is a caller error, and stops the program rather than returning an empty one.
+pure func no_scripted_state(provider: string) -> ScriptedPortsState {
+  let failed: Result[ScriptedPortsState, string] = Err("state_from_step_provider: ${provider} has no scripted state");
+  unwrap(failed)
 }
 
 export pure func scripted_model_next(state: ScriptedPortsState) -> { result: Result[StepResult, AIError], next: ScriptedPortsState } {

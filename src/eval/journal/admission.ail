@@ -116,7 +116,8 @@ import src/core/dst_program (
   ExecutionProgram, ProgramRejection, validate_program, program_rule, program_schema_version,
   SchemaFieldMissing, SchemaVersionUndecodable, InitialValueMissing, NegativeTime, DuplicateOrdinal,
   OrdinalNotDense, ImpossibleReference, IdentityComponentMissing, DeadlineDisagreesWithClass,
-  StreamOnNonProvider, ChunkOffsetsNotMonotone, OutcomeStatusDisagreesWithFault, EmptyProgram
+  StreamOnNonProvider, ChunkOffsetsNotMonotone, OutcomeStatusDisagreesWithFault, EmptyProgram,
+  AppliedFaultNotATool, AppliedFaultRepeated
 )
 import src/core/dst_profile (ExecutionManifest, ManifestRejection, ManifestFieldMissing, ManifestProfileMismatch, ManifestVersionDrifted, validate_manifest, manifest_rule)
 import src/core/dst_driver_only (driver_only, driver_only_manifest, driver_only_version)
@@ -339,6 +340,8 @@ pure func ad_rejection_location(r: ProgramRejection) -> Location {
     StreamOnNonProvider(o) => at(o),
     ChunkOffsetsNotMonotone(o) => at(o),
     OutcomeStatusDisagreesWithFault(o, _) => at(o),
+    AppliedFaultNotATool(o, _) => at(o),
+    AppliedFaultRepeated(o) => at(o),
     SchemaFieldMissing(_) => Aggregate("program"),
     SchemaVersionUndecodable(_) => Aggregate("program"),
     InitialValueMissing(_) => Aggregate("program"),
