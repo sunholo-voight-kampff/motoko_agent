@@ -41,6 +41,8 @@ export pure func state_from_step_provider(provider: StepProvider) -> ScriptedPor
 
 -- A world provider carries no scripted steps: asking for its scripted state
 -- is a caller error, and stops the program rather than returning an empty one.
+-- contracts: BLOCKED — never returns. It stops the program through
+-- `unwrap(Err(..))`, so there is no result for an `ensures` to constrain.
 pure func no_scripted_state(provider: string) -> ScriptedPortsState {
   let failed: Result[ScriptedPortsState, string] = Err("state_from_step_provider: ${provider} has no scripted state");
   unwrap(failed)
