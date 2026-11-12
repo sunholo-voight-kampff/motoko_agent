@@ -257,11 +257,11 @@ pure func test_open_waits_suppress_the_nudge() -> bool
     let base = test_ctx(contract_task(), hist);
     let nudged = match decide_with_budget(base, failure_candidate(), 2) {
       ContinueWithFeedback(_) => true,
-      NoDecision => false
+      _ => false
     };
     let silenced = match decide_with_budget({ base | open_waits: ja([jo([{ key: "id", value: js("h1") }])]) }, failure_candidate(), 2) {
       ContinueWithFeedback(_) => false,
-      NoDecision => true
+      _ => true
     };
     nudged && silenced && not declared_open_waits(base)
   }
