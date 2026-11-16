@@ -36,7 +36,7 @@ import pkg/sunholo/motoko_ext_conformance/fixtures/reject_fixtures (
   reject_nocache_hooks
 )
 
-func expect_ok(label: string, caps: [Capability], s: Scenario) -> int ! {IO, Process, FS, AI, Env, Net, SharedMem, Clock, Stream} {
+func expect_ok(label: string, caps: [Capability], s: Scenario) -> int ! {IO, Process, FS, AI, Env, Net, SharedMem, Clock, Stream, Trace} {
   match run_scenario(caps, s) {
     Ok(_) => 0,
     Err(f) => {
@@ -46,7 +46,7 @@ func expect_ok(label: string, caps: [Capability], s: Scenario) -> int ! {IO, Pro
   }
 }
 
-func expect_fail(label: string, caps: [Capability], s: Scenario, expected: string) -> int ! {IO, Process, FS, AI, Env, Net, SharedMem, Clock, Stream} {
+func expect_fail(label: string, caps: [Capability], s: Scenario, expected: string) -> int ! {IO, Process, FS, AI, Env, Net, SharedMem, Clock, Stream, Trace} {
   match run_scenario(caps, s) {
     Ok(_) => {
       let _ = println("kit FAIL ${label} scenario=${s.id} expected=${expected} got=ok");

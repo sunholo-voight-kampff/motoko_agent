@@ -766,20 +766,35 @@ export func main() -> () ! {IO, Env} {
   let r: R = { f: func(s: string) -> () ! {IO} { let _ = getEnvOr("PATH",""); println(s) } };
   r.f("x")
 }'
-if AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" >/dev/null 2>&1; then
-  ok "LIMITATION 1 still holds: a RECORD-FIELD lambda's declared row is NOT checked against its body — so narrowing a hook slot constrains only the bindings written as top-level functions"
-else
-  bad "LIMITATION 1 IS FIXED UPSTREAM: record-field lambda rows are now effect-checked. That is GOOD NEWS and it invalidates this file's controls — control_env/control_fs bind a performing body inline and must be re-sited, and every 'the compiler is the enforcer' claim in WI-D6/D7/D8 becomes true at more sites than it was"
-fi
+# ADR-001 AMENDMENT 8 (2026-11-16): THE TWO LIMITATIONS ARE A MEASURED SWITCH.
+# AILANG #2289 (released in v0.60.4) checks a lambda literal's own `! {…}`
+# against its body in every position, so both limitations close together.
+# Up to v0.60.3 (and on the v0.52.5 pin) both hold. The verdicts below are
+# taken first and printed after both probes ran, so the pair decides
+# LAMBDA_ROWS_CHECKED, which the boundary suite reads: on a toolchain that
+# checks lambda rows, the escapes that rode this door are compiler-rejected
+# and are scored in group 1 there, by their own diagnostic. A toolchain on
+# which the two disagree, or closes them for some other reason, is red.
+LAMBDA_ROWS_CHECKED=""
+if lim1_out=$(AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" 2>&1); then lim1_open=1; else lim1_open=0; fi
 
 write_lim 'export func main() -> () ! {IO} {
   let f = func(s: string) -> () ! {} { println(s) };
   f("x")
 }'
-if AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" >/dev/null 2>&1; then
+if lim2_out=$(AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" 2>&1); then lim2_open=1; else lim2_open=0; fi
+if [ "$lim1_open" = 1 ] && [ "$lim2_open" = 1 ]; then
+  LAMBDA_ROWS_CHECKED=0
+  ok "LIMITATION 1 still holds: a RECORD-FIELD lambda's declared row is NOT checked against its body — so narrowing a hook slot constrains only the bindings written as top-level functions"
   ok "LIMITATION 2 still holds: an EMPTY row on a lambda reads as 'unannotated, infer' rather than as the claim 'performs nothing' — so a slot narrowed to ! {} (WI-D6's on_budget_plan) constrains a lambda binding not at all"
+elif [ "$lim1_open" = 0 ] && [ "$lim2_open" = 0 ] \
+     && adr_lim_flat=$(echo "$lim1_out" | tr '\n' ' ') && grep -qE 'uses effects not declared in its ! \{IO\} annotation +Missing effects: Env' <<<"$adr_lim_flat" \
+     && adr_lim_flat=$(echo "$lim2_out" | tr '\n' ' ') && grep -qE 'uses effects not declared in its ! \{\} annotation +Missing effects: IO' <<<"$adr_lim_flat"; then
+  LAMBDA_ROWS_CHECKED=1
+  ok "LIMITATION 1 is CLOSED on this toolchain (ailang#2289, AILANG v0.60.4; ADR-001 Amendment 8): a RECORD-FIELD lambda's declared row IS checked against its body, rejected at its own annotation. control_env/control_fs are re-sited through LIMITATION 7's door (declared_vs_performed.ail), and the group-3 rows built through this door are scored in group 1 below"
+  ok "LIMITATION 2 is CLOSED on this toolchain (ailang#2289; Amendment 8): ! {} on a lambda is a checked claim, rejected at its own annotation — WI-D6's on_budget_plan narrowing now constrains a lambda binding too"
 else
-  bad "LIMITATION 2 IS FIXED UPSTREAM: ! {} on a lambda is now a checked claim. Re-read WI-D6's on_budget_plan narrowing — it buys strictly more than it did"
+  bad "LIMITATIONS 1 and 2 did not move TOGETHER, or closed for another reason (limitation 1 open=$lim1_open, limitation 2 open=$lim2_open). ailang#2289 closes both at once and Amendment 8 reads them as one switch — re-measure before trusting any row below: $(echo "$lim1_out$lim2_out" | grep -E '^Error' | head -1)"
 fi
 
 # The two-sided half of limitation 1: the SAME body in argument position IS
@@ -838,7 +853,15 @@ EOF
 upd_lambda='func(ctx: ExtCtx, _m: [Msg]) -> PreStepOutcome ! {AI, IO, Trace} { let _ = getEnvOr("PATH", ""); { decision: { PassThrough }, next_state: ctx.world } }'
 
 write_upd "export func build() -> ExtensionHooks ! {Env} { { default_hooks(\"p\") | on_pre_step: $upd_lambda } }"
-if AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" >/dev/null 2>&1; then
+if [ "$LAMBDA_ROWS_CHECKED" = 1 ]; then
+  if out=$(AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" 2>&1); then
+    bad "UPDATE POSITION (a) was ACCEPTED on a toolchain whose LIMITATION 1/2 probes say lambda rows are checked — update position is the one place #2289 did not reach; re-read D8 and Amendment 8"
+  elif echo "$out" | grep -q "uses effects not declared in its"; then
+    ok "UPDATE POSITION (a) on this toolchain: the inline lambda is REJECTED at its own annotation in record-update position too (ailang#2289; Amendment 8) — the controls no longer use this position (declared_vs_performed.ail)"
+  else
+    bad "UPDATE POSITION (a): rejected, but NOT at the lambda's own annotation: $(echo "$out" | grep -E '^Error' | head -1)"
+  fi
+elif AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" >/dev/null 2>&1; then
   ok "UPDATE POSITION (a): an inline lambda that declares the slot row and performs Env is ACCEPTED behind a default_hooks head when the enclosing row admits Env — limitation 1 holds in record-update position (D8: the controls need not move)"
 else
   bad "UPDATE POSITION (a) CHANGED: an inline lambda's body is now checked against its declared row in record-update position. GOOD NEWS upstream, and it means env_control_hooks/fs_control_hooks (already behind a \`control_base() |\` head) no longer compile as written — re-site them, and re-read D8"
@@ -1012,7 +1035,8 @@ fi
 write_abi_ctor 'export func build() -> [Capability] ! {Env} { [Compactor(func(ctx: AiCtx, _m: [Msg]) -> PreStepOutcome { let _ = getEnvOr("PATH",""); { decision: PassThrough, next_state: ctx.world } })] }'
 if out=$(AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" 2>&1); then
   bad "IMPORTED SUM (unannot): an UNANNOTATED inline lambda performing Env was ACCEPTED as a Compactor atom under an enclosing ! {Env} -- the 5.x absorption survives on the real ABI"
-elif grep -qF "incompatible closed rows" <<<"$out" && grep -qF "r2 has extra labels [Env]" <<<"$out"; then
+elif { grep -qF "incompatible closed rows" <<<"$out" && grep -qF "r2 has extra labels [Env]" <<<"$out"; } \
+     || grep -qF "carries labels [Env] which the closed row {AI, IO, Trace} does not permit" <<<"$out"; then
   ok "IMPORTED SUM (unannot): an UNANNOTATED inline lambda performing Env is REJECTED at the payload row even though the enclosing row admits Env -- the enclosing row no longer absorbs an inline atom"
 else
   bad "IMPORTED SUM (unannot): rejected, but not at the payload row over Env -- establishes nothing: $(echo "$out" | grep -E '^Error' | head -1)"
@@ -1036,7 +1060,15 @@ export func build() -> [Capability] ! {Env} {
   let w: W = { f: func(ctx: AiCtx, _m: [Msg]) -> PreStepOutcome ! {AI, IO, Trace} { let _ = getEnvOr("PATH",""); { decision: PassThrough, next_state: ctx.world } } };
   [Compactor(w.f)]
 }'
-if AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" >/dev/null 2>&1; then
+if [ "$LAMBDA_ROWS_CHECKED" = 1 ]; then
+  if out=$(AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" 2>&1); then
+    bad "IMPORTED SUM (smuggle) was ACCEPTED on a toolchain whose LIMITATION 1/2 probes say lambda rows are checked — the record-field door is still open here; re-read Amendment 8"
+  elif echo "$out" | grep -q "uses effects not declared in its"; then
+    ok "IMPORTED SUM (smuggle) is REJECTED on this toolchain at the stored lambda's own annotation (ailang#2289; Amendment 8): the record-field door into a 6.0 payload is closed, and control_env/control_fs are built through LIMITATION 7's door instead"
+  else
+    bad "IMPORTED SUM (smuggle): rejected, but NOT at the stored lambda's annotation: $(echo "$out" | grep -E '^Error' | head -1)"
+  fi
+elif AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" >/dev/null 2>&1; then
   ok "IMPORTED SUM (smuggle): the SAME performing lambda bound to a LOCAL record field first and then passed as the atom is ACCEPTED -- limitation 1 is the one remaining door into a 6.0 payload, and it is what this file's control_env/control_fs use"
 else
   bad "IMPORTED SUM (smuggle) was REJECTED: record-field lambda rows are now checked upstream. GOOD NEWS, and control_env/control_fs (built through that door) can no longer be constructed -- rebuild them before trusting the runtime rows above"
@@ -1180,7 +1212,7 @@ fi
 ADR_LOCALSUM_PINNED="config_projection n_dec_prepare_escape v7_describe_config"
 adr_localsum=$(for f in "$ADR_FX"/*.ail; do
   n=$(basename "$f" .ail)
-  case "$n" in types|helpers|boundary_types|v7_mkmod) continue;; esac
+  case "$n" in (types|helpers|boundary_types|v7_mkmod) continue;; esac
   grep -qE "^import $ADR_FX/(types|boundary_types) \(.*(Slot|FsSlot|Capability)" "$f" || echo "$n"
 done | sort | tr '\n' ' ' | sed 's/ $//')
 adr_n_local=$(echo $adr_localsum | wc -w | tr -d ' ')
@@ -1217,7 +1249,7 @@ fi
 adr_n_recon=$(ls "$ADR_RX"/*.ail | grep -vE '/(judge_types|rec_types)\.ail$' | wc -l | tr -d ' ')
 adr_rlocal=$(for f in "$ADR_RX"/*.ail; do
   n=$(basename "$f" .ail)
-  case "$n" in judge_types|rec_types) continue;; esac
+  case "$n" in (judge_types|rec_types) continue;; esac
   grep -qE "^import $ADR_FX/(types|reconstructed/judge_types) \(.*(Slot|FsSlot|Judge)" "$f" || echo "$n"
 done | tr '\n' ' ' | sed 's/ $//')
 if [ -z "$adr_rlocal" ]; then
@@ -1239,10 +1271,23 @@ rc_n=0
 adr_rg1() {   # $1 case, $2 table reason (app | eff:X | letann), $3 what it establishes
   g1_n=$((g1_n+1)); rc_n=$((rc_n+1))
   local out re line
+  # AMENDMENT 8: `app` and `eff:X` are the TWO ARMS of one rejection — the
+  # payload row at a constructor application and the effect check of the named
+  # function that performs. Which arm reports first is the compiler's pass
+  # order, and it moved twice since the pin (v0.60.3 names the constructor,
+  # `function application of make_Slot_Pure at`, and words the closed row as
+  # `carries labels [IO] which the closed row {} does not permit`; v0.60.4
+  # effect-checks some bodies before unifying the payload; and two `app` rows,
+  # q_named_letannot and q_named_recfield_paren, report at their own `let`
+  # annotation from v0.60.3). So each arm accepts
+  # its sibling on the same fixture, and the row prints which arm fired. Any
+  # other reason is still `bad`.
+  local app_row="failed to unify effect rows: (incompatible closed rows: r1 has extra labels \[\], r2 has extra labels \[IO\]|row \{IO, [^}]*\} carries labels \[IO\] which the closed row \{\} does not permit)"
+  local any_app="function application (of make_[A-Za-z_]+ )?at $ADR_RX/$1\.ail:[0-9]+:[0-9]+\]: failed to unify parameter 0: $app_row"
   case "$2" in
     app)    line=$(grep -n 'Pure(body)' "$ADR_RX/$1.ail" | grep 'func build' | cut -d: -f1)
-            re="function application at $ADR_RX/$1\.ail:$line:[0-9]+\]: failed to unify parameter 0: failed to unify effect rows: incompatible closed rows: r1 has extra labels \[\], r2 has extra labels \[IO\]" ;;
-    eff:*)  re="Effect checking failed for function '${2#eff:}'.*Missing effects: IO" ;;
+            re="function application (of make_Slot_Pure )?at $ADR_RX/$1\.ail:$line:[0-9]+\]: failed to unify parameter 0: $app_row|Effect checking failed for function '(body|build)'.*Missing effects: IO|let annotation [a-z]+ at $ADR_RX/$1\.ail:[0-9]+:[0-9]+\]: (failed to unify record field 'f': )?failed to unify effect rows: incompatible closed rows: r1 has extra labels \[IO\], r2 has extra labels \[\]" ;;
+    eff:*)  re="Effect checking failed for function '${2#eff:}'.*Missing effects: IO|$any_app" ;;
     letann) re="let annotation r at $ADR_RX/$1\.ail" ;;
   esac
   if out=$(adr_chk "reconstructed/$1"); then
@@ -1305,12 +1350,24 @@ adr_g2() {   # $1 case, $2 expected run output regex, $3 what it establishes
 # output: acceptance alone is not an escape -- an accepted case that performs
 # nothing is a group-2 or group-4 row, not this.
 adr_g3() {   # $1 limitation number, $2 case, $3 effect-evidence regex, $4 what still holds, $5 what a fix invalidates
-  g3_n=$((g3_n+1))
   local out rout
   if ! out=$(adr_chk "$2"); then
+    # AMENDMENT 8: on a toolchain that checks a lambda literal's own row
+    # (LAMBDA_ROWS_CHECKED, measured by LIMITATION 1/2 above) the escape is
+    # rejected AT THE PAYLOAD LAMBDA'S ANNOTATION. Its measured result has
+    # changed, so the row is a compiler-rejected control there (group 1), by
+    # that diagnostic and no other; before v0.60.4 it is a group-3 escape.
+    if [ "$LAMBDA_ROWS_CHECKED" = 1 ] \
+       && adr_flat "$out" | grep -qE "lambda at $ADR_FX/$2\.ail:[0-9]+:[0-9]+ uses effects not declared in its ! \{[A-Za-z, ]*\} annotation +Missing effects: IO"; then
+      g1_n=$((g1_n+1)); g1_held=$((g1_held+1))
+      ok "GROUP 1 (LIMITATION $1, $2): REJECTED at the payload lambda's own annotation on this toolchain (ailang#2289; ADR-001 Amendment 8) — $5"
+      return
+    fi
+    g3_n=$((g3_n+1))
     bad "LIMITATION $1 IS FIXED UPSTREAM: $5 ($2 is now rejected at check: $(adr_err "$out"))"
     return
   fi
+  g3_n=$((g3_n+1))
   if ! rout=$(adr_run "$2"); then
     bad "LIMITATION $1 ($2): the pinned compiler still ACCEPTS the construction, but it no longer PERFORMS at invocation. The row can no longer tell an escape from a compile-only curiosity — re-measure before citing it: $(echo "$rout" | grep -E '^Error' | head -1)"
     return
@@ -1330,12 +1387,25 @@ adr_g3() {   # $1 limitation number, $2 case, $3 effect-evidence regex, $4 what 
 # missing-field failure the runtime reports as a registration defect, never as an
 # `Unavailable` an interpreter may vote on.
 adr_ma() {   # $1 limitation number, $2 case, $3 runtime error regex, $4 what still holds
-  ga_n=$((ga_n+1))
   local out rout
   if ! out=$(adr_chk "$2"); then
+    # AMENDMENT 8: from AILANG v0.60.4 (ailang#2288) a field access on a
+    # concrete record is checked where it is written, so the missing port is
+    # REJECTED AT CHECK (TC_REC_001). On that toolchain (REC_FIELDS_CHECKED,
+    # measured below) the row is a compiler-rejected control in group 1, by
+    # that diagnostic on this fixture's own field; before it, class 2(a).
+    local field=${3#record has no field: }
+    if [ "$REC_FIELDS_CHECKED" = 1 ] \
+       && adr_flat "$out" | grep -qE "field access at $ADR_FX/$2\.ail:[0-9]+:[0-9]+\]: TC_REC_001: field '$field' not found in record"; then
+      g1_n=$((g1_n+1)); g1_held=$((g1_held+1))
+      ok "GROUP 1 (LIMITATION $1, $2): REJECTED AT CHECK on this toolchain with TC_REC_001 on '$field' (ailang#2288; ADR-001 Amendment 8) — the compile-time check DOES catch a lambda calling a port its view lacks here; ADR fact 1 and the 2(a) evidence hold only before AILANG v0.60.4"
+      return
+    fi
+    ga_n=$((ga_n+1))
     bad "LIMITATION $1 IS FIXED UPSTREAM: $2 is now REJECTED AT CHECK, so the compile-time check DOES catch a lambda calling a port its view lacks. That is good news and it invalidates ADR fact 1 and the 2(a) evidence's 'the compile-time check does not catch it for lambdas' sentence, which must be re-read: $(adr_err "$out")"
     return
   fi
+  ga_n=$((ga_n+1))
   if rout=$(adr_run "$2"); then
     bad "LIMITATION $1 ($2): accepted at check AND COMPLETED AT RUNTIME. The missing field no longer fails the call, so a port-free view is no longer a runtime barrier either and 2(a)'s whole class is unsupported: $(echo "$rout" | tail -2 | tr '\n' ' ')"
     return
@@ -1348,8 +1418,28 @@ adr_ma() {   # $1 limitation number, $2 case, $3 runtime error regex, $4 what st
   fi
 }
 
+# AMENDMENT 8's second switch: does this toolchain check a field access on a
+# concrete record where it is written (TC_REC_001, ailang#2288, AILANG v0.60.4)?
+# Measured on a local record, outside the fixtures it decides for.
+write_lim 'type R = { name: string }
+export func main() -> () ! {IO} {
+  let f = func(c: R) -> string { c.ports };
+  println(f({name: "x"}))
+}'
+if rec_out=$(AILANG_RELAX_MODULES=1 ailang check "$LIMPROBE" 2>&1); then
+  REC_FIELDS_CHECKED=""
+  bad "REC SWITCH: a lambda reading a field its record lacks was ACCEPTED — neither the old nor the v0.60.4 checker does that; the class 2(a) rows below cannot be read"
+elif grep -qF "TC_REC_001: field 'ports' not found in record" <<<"$rec_out"; then
+  REC_FIELDS_CHECKED=1
+  ok "REC SWITCH: this toolchain checks a field access where it is written (TC_REC_001, ailang#2288) — class 2(a)'s rows are scored in group 1 below, by that diagnostic (Amendment 8)"
+else
+  REC_FIELDS_CHECKED=0
+  ok "REC SWITCH: this toolchain rejects a missing field only at the application (no TC_REC_001; before AILANG v0.60.4) — class 2(a)'s rows keep their class"
+fi
+limcleanup
+
 echo ""
-echo "   class 2(a) — MISSING AUTHORITY: accepted at check, fails at invocation (ADR item 2(a), N23)"
+echo "   class 2(a) — MISSING AUTHORITY: accepted at check, fails at invocation (ADR item 2(a), N23); compiler-rejected from AILANG v0.60.4 (Amendment 8)"
 
 adr_ma 3 missingport "record has no field: ports" \
   "an inline lambda calling ctx.ports.emit on a PureCtx that carries NO ports field is ACCEPTED by ailang check and fails only at invocation — the compile-time rejection ADR v0.3 claimed does not exist for lambdas (ADR fact 1)"
@@ -1361,33 +1451,33 @@ adr_ma 5 fs_missing "record has no field: clock_now" \
 echo ""
 echo "   group 1 — COMPILER-REJECTED CONTROLS: the named arm the compiler itself enforces"
 
-adr_g1 direct "incompatible closed rows" \
+adr_g1 direct "incompatible closed rows|carries labels \\[IO\\] which the closed row \\{\\} does not permit" \
   "an inline lambda performing println straight into the payload is rejected at the payload row"
 adr_g1 named "incompatible closed rows" \
   "the same body as a NAMED top-level function is rejected — the named arm is what carries the effect load (ADR D2 layer (b))"
-adr_g1 captured "incompatible closed rows" \
+adr_g1 captured "incompatible closed rows|carries labels \\[IO\\] which the closed row \\{\\} does not permit" \
   "a lambda calling an effectful field of an UNTYPED captured record is rejected"
-adr_g1 capturedannot "incompatible closed rows" \
+adr_g1 capturedannot "incompatible closed rows|carries labels \\[IO\\] which the closed row \\{\\} does not permit|Effect checking failed for function 'build'" \
   "the same with the payload lambda annotated ! {} is rejected at its own annotation's row"
 adr_g1 capturednamed "incompatible closed rows" \
   "a NAMED body that builds the effectful record in its own body is rejected — a named function cannot capture, so the value must arrive by a charged call"
-adr_g1 localrecord "incompatible closed rows" \
+adr_g1 localrecord "incompatible closed rows|carries labels \\[IO\\] which the closed row \\{\\} does not permit|Effect checking failed for function 'build'" \
   "a locally-typed record's field passed DIRECTLY as the payload, Pure(w.f), is rejected — the pass-through named call is what makes the escape, not the record"
 adr_g1 localunannot "incompatible closed rows" \
   "the same direct Pure(w.f) under an enclosing ! {IO} with the stored lambda unannotated is still rejected"
-adr_g1 localannot "incompatible closed rows" \
+adr_g1 localannot "incompatible closed rows|carries labels \\[IO\\] which the closed row \\{\\} does not permit|lambda at $ADR_FX/localannot\\.ail:[0-9]+:[0-9]+ uses effects not declared in its ! \\{\\} annotation" \
   "and with the stored lambda annotated ! {} — so group 3's escapes are attributable to the intervening named call, not to the local record type"
 adr_g1 helper "record field mismatch: expected 2 fields, got 1" \
   "the closed-record migration control: a callback cannot widen its own context by calling a helper that wants more fields — AILANG records are closed"
-adr_g1 missingnamed "record field 'ports' not found in concrete record" \
+adr_g1 missingnamed "record field 'ports' not found in concrete record|TC_REC_001: field 'ports' not found in record" \
   "the same missing-port body as a NAMED function IS caught at compile time — which is exactly what class 2(a) above shows lambdas escape"
-adr_g1 missingworld "record field 'world' not found in concrete record" \
+adr_g1 missingworld "record field 'world' not found in concrete record|TC_REC_001: field 'world' not found in record" \
   "reading ctx.world from a view that has no world token is rejected — PureCtx drops the world as well as the ports"
-adr_g1 n_pure_named_localsmuggle "incompatible closed rows" \
+adr_g1 n_pure_named_localsmuggle "incompatible closed rows|carries labels \\[IO\\] which the closed row \\{\\} does not permit|Effect checking failed for function 'body'" \
   "a NAMED body building the local record in its own body is rejected — the fourth review's escape does not survive being named"
-adr_g1 n_pure_passthru_capturedfn "incompatible closed rows" \
+adr_g1 n_pure_passthru_capturedfn "incompatible closed rows|carries labels \\[IO\\] which the closed row \\{\\} does not permit|lambda at $ADR_FX/n_pure_passthru_capturedfn\\.ail:[0-9]+:[0-9]+ uses effects not declared in its ! \\{\\} annotation" \
   "the pass-through capturing a BARE FUNCTION VALUE instead of a record is rejected — the carrier must be a record FIELD, which is the 017 hole"
-adr_g1 n_pure_passthru_xmod "let annotation w" \
+adr_g1 n_pure_passthru_xmod "let annotation w|Effect checking failed for function 'build'" \
   "the same pass-through with the record type IMPORTED is rejected AT THE LET — a cross-module record type closes the escape, and this is where a migrated ABI type puts it"
 adr_g1 fs_direct "Effect checking failed for function 'build'" \
   "an inline lambda performing IO inside an FS view is charged to the enclosing build"
@@ -1409,9 +1499,9 @@ adr_g1 q_named_toplevel_apply "Effect checking failed for function 'w'" \
   "a MODULE-LEVEL let holding the effectful record is itself effect-checked as a rowless function — the one place a value could arrive without a call is closed"
 adr_g1 named_match_record "Effect checking failed for function 'body'" \
   "an effectful local lambda inside a MATCHED record is charged to the named body"
-adr_g1 named_list_lambda "incompatible closed rows" \
+adr_g1 named_list_lambda "incompatible closed rows|carries labels \\[IO\\] which the closed row \\{\\} does not permit|Effect checking failed for function 'body'" \
   "the same inside a LIST is rejected"
-adr_g1 named_tuple_lambda "incompatible closed rows" \
+adr_g1 named_tuple_lambda "incompatible closed rows|carries labels \\[IO\\] which the closed row \\{\\} does not permit|Effect checking failed for function 'body'" \
   "the same inside a TUPLE is rejected"
 adr_g1 named_module_env "Effect checking failed for function 'policy'" \
   "a module-level INITIALIZER reading the environment is charged to itself, with Missing effects: Env — registration-time ambient reads are not free"

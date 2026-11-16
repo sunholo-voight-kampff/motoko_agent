@@ -9,6 +9,10 @@
 # about the row. Measured while building this spec: the piped form scored
 # baseline red / mutated red on a row that discriminates perfectly. So each row
 # redirects to a log and greps the FILE.
+# PINNED TO THE v0.52.5 TOOLCHAIN (ADR-001 Amendment 8). From AILANG v0.60.4 the rows for
+# LIMITATIONS 3, 6 and 18 are scored in group 1 (the compiler rejects the fixture at its own
+# lambda annotation or with TC_REC_001), so their greps for "still holds" do not apply and the
+# lim6/lim18 mutations measure the annotation, not the escape. Re-derive before running newer.
 # fix_id	target_file	sed_expr	test_cmd
 p02_g3_lim6_escape	scripts/dst/fixtures/adr001_boundary/n_pure_passthru_captured.ail	s/func build() -> Slot ! {IO}/func build() -> Slot/	make declared_vs_performed
 p02_g3_lim18_import_shadow	scripts/dst/fixtures/adr001_boundary/v7_delegate_import_shadow.ail	s/let make_hooks = func(_n: int)/let make_hooks2 = func(_n: int)/	./scripts/dst/run_declared_vs_performed.sh > /tmp/p02_p02_g3_lim18_import_shadow.log 2>&1; grep -qF "✓ LIMITATION 18 still holds" /tmp/p02_p02_g3_lim18_import_shadow.log
