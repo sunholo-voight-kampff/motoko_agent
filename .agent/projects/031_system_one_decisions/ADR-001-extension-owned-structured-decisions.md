@@ -1505,6 +1505,89 @@ it. Two other passages describe DP7 as it was and decide nothing: the session ro
 current-behavior table (`:75`) and D4's sentence that DP7 verifies workspace work and not a
 candidate's prose (`:636-637`). They are left as written.
 
+### Amendment 8 (2026-11-16) — from AILANG v0.60.4 a lambda's own row and a field access are checked where they are written: fifteen suite rows are compiler-rejected there, and the controls move
+
+**Supersedes**, for toolchains from AILANG v0.60.4 on, freeze item 2(a)'s clause "the compile-time
+check does *not* catch it for lambdas and the evidence must say so" (`:1110-1111`), ADR fact 1 as
+the runner cites it, the words "accepted by the bare compiler" for the twelve group-3 escapes
+listed below (`:1118-1121`), and the runner's statement that the vacuity controls go through
+LIMITATION 1's door (`scripts/dst/declared_vs_performed.ail`, the B8 note). **The rule does not
+move**, and neither does any ABI type, constructor or version. On the v0.52.5 pin, and on every
+toolchain up to v0.60.3, every row keeps the class and the verdict it had.
+
+**The artifact: rows that went red on a newer compiler.** Two AILANG changes released in v0.60.4
+reach this suite:
+
+- sunholo-data/ailang#2289: a function literal's `! {…}` annotation is checked against its body
+  in every position, record field and constructor argument included, and `! {}` is a claim
+  rather than "infer". LIMITATIONS 1 and 2 close together.
+- sunholo-data/ailang#2288: a field access on a concrete record is checked where it is written
+  (`TC_REC_001: field 'ports' not found in record {name}`), lambdas included.
+
+Run on v0.60.4 (and on AILANG `dev` after it), `scripts/dst/run_declared_vs_performed.sh` turned
+these rows red with their own "IS FIXED UPSTREAM" text:
+
+| rows | on v0.52.5 and v0.60.3 | from v0.60.4 |
+|---|---|---|
+| LIMITATION 1, LIMITATION 2, UPDATE POSITION (a), IMPORTED SUM (smuggle) | accepted | rejected at the lambda's own annotation |
+| class 2(a): LIMITATION 3 `missingport`, 4 `missingannot`, 5 `fs_missing` | accepted at check, die at invocation | rejected at check, `TC_REC_001` on the missing field |
+| group 3: LIMITATIONS 6, 8–18 (`n_pure_passthru_captured`, `n_fs_passthru_captured2`, `n_dec_prepare_escape`, `q_named_paren_apply`, `q_named_partial`, `q_named_shadow`, `delegate_shadow`, `v7_param_shadow`, `v7_delegate_param`, `computed_list`, `fs_smuggle`, `v7_delegate_import_shadow`) | accepted, perform | rejected at the payload lambda's own `! {}` / `! {FS}` |
+| group 3: LIMITATION 7 `n_pure_passthru_unannot` (stored lambda unannotated) | accepted, performs | **accepted, performs** — unchanged |
+| the vacuity probe `declared_vs_performed.ail` (`env_control_body`, `fs_control_body`) | compiles | does not compile: every runtime arm read as "performs" |
+
+In the same run, eighteen group-1 and reconstructed rows were red on v0.60.3 already, and more on
+v0.60.4, without any of them being accepted: the compiler still rejects each attack, but reports
+it in other words or through the other arm. v0.60.3 names the constructor
+(`function application of make_Slot_Pure at …`) and words the closed row as `row {IO, …} carries
+labels [IO] which the closed row {} does not permit`; v0.60.4 effect-checks some named bodies
+before it unifies the payload, so `Effect checking failed for function 'body'` reports first.
+
+**What is adopted.**
+
+1. **A measured switch, not a version string.** The runner takes the LIMITATION 1 and 2 probes
+   first and reads the pair as `LAMBDA_ROWS_CHECKED`: both open is the old toolchain, both closed
+   at the lambda's own annotation is the new one, anything else is red. A second probe on a local
+   record sets `REC_FIELDS_CHECKED` from whether the checker answers `TC_REC_001`.
+2. **A row whose measured result changed changes class, by its own diagnostic and no other**
+   (the Amendment 6 precedent). On a toolchain with `LAMBDA_ROWS_CHECKED`, a group-3 row that is
+   rejected at its payload lambda's annotation (`lambda at <fixture>:L:C uses effects not declared
+   in its ! {…} annotation`, `Missing effects: IO`) is scored in group 1. On a toolchain with
+   `REC_FIELDS_CHECKED`, a class 2(a) row rejected with `TC_REC_001` on its own missing field is
+   scored in group 1. Any other rejection is still red, and on the older toolchains the rows run
+   exactly as before. No row is added and none is removed: the denominators move between groups
+   by measurement, and the "every fixture is scored" total is unchanged. On v0.60.4 the scores
+   read class 2(a) 0/0, group 1 59/59, group 3 1/1.
+3. **The group-1 reasons name both arms of one rejection.** Each changed row now accepts its old
+   wording and the v0.60 wordings of the same mechanism on the same fixture: the closed-row
+   verdict in either phrasing, the effect check of the fixture's own `build`/`body`, or the
+   lambda's own annotation. The reconstructed rows accept the arms {payload row at the fixture's
+   constructor application, effect check of the fixture's named function, and — for an `app` row
+   — the fixture's own `let` annotation, where v0.60.3 reports `q_named_letannot` and
+   `q_named_recfield_paren`} and print the compiler's line.
+4. **The controls move to LIMITATION 7's door.** `control_env`/`control_fs` store an UNANNOTATED
+   performing lambda in a field whose type carries no row and call it through a named
+   pass-through (`control_apply`) from the Compactor payload, which is the construction LIMITATION
+   7 pins as still open. They compile on v0.52.5, v0.60.3 and v0.60.4 and die on `Env` / `FS` at
+   dispatch on all three. When LIMITATION 7 closes they stop compiling and must move again.
+5. **The gate's `compiler` pins become lists where the toolchain decides.** Eleven fixtures in
+   `scripts/dst/fixtures/adr001_boundary/gate/expected.json` are `["clean", "rejected"]`, with a
+   `compiler_note`; `hook_scope.py --ailang-check` accepts either member. The shape verdicts do
+   not move.
+
+**Consequence, stated.** From v0.60.4 the compiler, not the boundary, rejects twelve of the
+thirteen group-3 escapes, because each writes its payload lambda with an annotation. The escape
+itself is not closed: LIMITATION 7, the same pass-through with the stored lambda unannotated,
+compiles and performs on v0.60.4, so the D2 boundary is still what stops the construction, and
+the residual in D2 is unchanged. The mutation gate's rows for LIMITATIONS 3, 6 and 18
+(`scripts/dst/adr001_boundary_mutgate_spec.tsv`) grep the pin's wording and measure the
+annotation, not the escape, on v0.60.4; they are pinned to v0.52.5 and say so.
+
+**Also fixed on the way.** `run_declared_vs_performed.sh` did not parse under bash 3.2 (the rig's
+`/bin/bash`): two `case … in a|b) …;; esac` inside `$(…)` are written with the leading `(` that
+3.2 needs. The runner's earlier sections already failed on this fork before AILANG moved (the
+generated registry's `ailang_policy` arm is unmeasured, and the absorption counts are 19/16/4,
+not 18/15/3); this amendment does not touch them.
+
 ## Related records
 
 - [037: Skills system](../037_skills_system/ADR-001-skills-system.md) — D2 is the decision Amendment 5 records

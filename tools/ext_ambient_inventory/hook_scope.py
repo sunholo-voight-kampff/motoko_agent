@@ -1855,8 +1855,13 @@ def gate_fixture_suite(repo: Path, gate_dir: Path, producer=None, builtins=None,
             rc = subprocess.run(["ailang", "check", rel], cwd=repo,
                                 capture_output=True, text=True).returncode
             got = "clean" if rc == 0 else "rejected"
-            if got != want["compiler"]:
-                problems.append(f"expected the pinned compiler to find it {want['compiler']}, "
+            # A LIST pins a verdict that depends on the toolchain, each member
+            # named in the fixture's `compiler_note` (ADR-001 Amendment 8: the
+            # `! {}`-literal escapes are clean up to AILANG v0.60.3 and rejected
+            # at the lambda's own annotation from v0.60.4).
+            allowed = want["compiler"] if isinstance(want["compiler"], list) else [want["compiler"]]
+            if got not in allowed:
+                problems.append(f"expected the pinned compiler to find it {' or '.join(allowed)}, "
                                 f"it found it {got}")
             extra += f"  compiler={got}"
         if problems:
