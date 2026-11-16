@@ -21,6 +21,12 @@
     "registration form at HEAD, on the 7.4 head; P1.2 rewrites each to the migrated form and flips",
     "its pin to pass, batch by batch.",
     "",
+    "TOOLCHAIN-DEPENDENT `compiler` PINS (ADR-001 Amendment 8). From AILANG v0.60.4 a lambda literal's",
+    "own row is checked against its body (ailang#2289), so the eleven escapes that carry a `! {}`",
+    "payload lambda are rejected by `ailang check` there and clean on v0.60.3 and the v0.52.5 pin.",
+    "Their pin is the list [\"clean\", \"rejected\"]; `--ailang-check` accepts either member, and the",
+    "shape gate's own verdict is unchanged on both.",
+    "",
     "`fx_residue` is the row that shows the two results are distinct: its walk verdict is",
     "HOOK-UNRESOLVED (`show`, door 3) and its shape result is PASS. `fx_delegated_record` records a",
     "READING of D2's grammar taken by P0.3: the record is written at `register_with_config`'s tail",
@@ -90,7 +96,11 @@
       "group": "fail",
       "form": "fact 5 / q_named_shadow: local `let body = func(..)` over top-level `func body`",
       "atoms": 1,
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_delegate_shadow": {
       "shape": "fail",
@@ -100,7 +110,11 @@
       ],
       "group": "fail",
       "form": "fact 6 / delegate_shadow: local `let make_hooks` over top-level `func make_hooks`",
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_param_shadow": {
       "shape": "fail",
@@ -111,7 +125,11 @@
       "group": "fail",
       "form": "v7_param_shadow: `make_hooks(body: (Ctx) -> int)` binds its PARAMETER under a top-level func's name",
       "atoms": 1,
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_delegate_param": {
       "shape": "fail",
@@ -121,7 +139,11 @@
       ],
       "group": "fail",
       "form": "v7_delegate_param: `build_with(mk: ..)` delegates to its PARAMETER under a top-level func's name",
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_partial": {
       "shape": "fail",
@@ -132,7 +154,11 @@
       "group": "fail",
       "form": "q_named_partial: `ToolPolicy(apply_w(w))` -- a function value built at registration",
       "atoms": 1,
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_computed": {
       "shape": "fail",
@@ -142,7 +168,11 @@
       ],
       "group": "fail",
       "form": "computed_list: `caps: if .. then [ToolPolicy(..)] else []`",
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_match": {
       "shape": "fail",
@@ -152,7 +182,11 @@
       ],
       "group": "fail",
       "form": "`caps: match cfg { 0 => [], _ => [ToolPolicy(..)] }`",
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_unknown": {
       "shape": "fail",
@@ -162,7 +196,11 @@
       ],
       "group": "fail",
       "form": "`let hooks = [..]; caps: hooks` -- a list the reader cannot resolve to a literal or a named func",
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_inline_lambda": {
       "shape": "fail",
@@ -173,7 +211,11 @@
       "group": "fail",
       "form": "8.0 head; `ToolPolicy(func(ctx) { apply(ctx, w) })` -- facts 1 and 4's construction",
       "atoms": 1,
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_import_shadow": {
       "shape": "fail",
@@ -184,7 +226,11 @@
       "group": "fail",
       "form": "v7_import_shadow: local `let body` over an IMPORTED `body`; the local runs from AILANG v0.52.0 (the import ran before, N62)",
       "atoms": 1,
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_delegate_import_shadow": {
       "shape": "fail",
@@ -194,7 +240,11 @@
       ],
       "group": "fail",
       "form": "v7_delegate_import_shadow: local `let make_hooks` over an IMPORTED `make_hooks`; the local runs from AILANG v0.52.0 (the import ran before, N62)",
-      "compiler": "clean"
+      "compiler": [
+        "clean",
+        "rejected"
+      ],
+      "compiler_note": "clean up to AILANG v0.60.3 (and on the v0.52.5 pin); rejected from v0.60.4 at the payload lambda's own `! {}`, which is now checked against its body (ailang#2289; ADR-001 Amendment 8). The SHAPE verdict does not depend on it."
     },
     "fx_delegate_unresolved": {
       "shape": "fail",

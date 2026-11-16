@@ -542,28 +542,47 @@ pure func compose_cfg(mode: string) -> ComposeHostConfig {
 -- bind the lambda to a field of a LOCAL record type (where its row is not
 -- checked against its body -- limitation 1), then pass the field. Which is
 -- exactly the door the ADR feared and the runner's `smuggle` row pins.
-type ControlBody = { f: (AiCtx, [Msg]) -> PreStepOutcome ! {AI, IO, Trace} }
+-- AILANG #2289 (v0.60.4) CLOSED THAT DOOR: a lambda literal's own `! {…}` is
+-- now checked against its body in record-field position too (LIMITATION 1 and
+-- the group-3 fs_smuggle row go red on it, by design). The controls therefore
+-- moved to the door that is still open on v0.60.4 and on the v0.52.5 pin —
+-- the group-3 LIMITATION 7 construction (n_pure_passthru_unannot): the
+-- performing lambda is UNANNOTATED and stored in a field whose type carries
+-- no row, and a NAMED pass-through (`control_apply`) calls it from the
+-- Compactor payload. The atom is still built in the enclosing `! {Env}` /
+-- `! {FS}` builder and still performs at dispatch, which is all a vacuity
+-- control needs. When LIMITATION 7 closes upstream these stop compiling and
+-- must be re-sited again.
+type ControlBody = { f: (AiCtx, [Msg]) -> PreStepOutcome }
+
+-- The pass-through: a NAMED function whose row is the field's (none), so the
+-- Compactor payload that calls it type-checks at the slot row.
+func control_apply(w: ControlBody, ctx: AiCtx, msgs: [Msg]) -> PreStepOutcome { w.f(ctx, msgs) }
 
 func env_control_body() -> ControlBody ! {Env} {
-  { f: func(ctx: AiCtx, _msgs: [Msg]) -> PreStepOutcome ! {AI, IO, Trace} {
+  { f: func(ctx: AiCtx, _msgs: [Msg]) -> PreStepOutcome {
       let _ = getEnvOr("PATH", "");
       { decision: { PassThrough }, next_state: ctx.world }
     } }
 }
 
 func fs_control_body() -> ControlBody ! {FS} {
-  { f: func(ctx: AiCtx, _msgs: [Msg]) -> PreStepOutcome ! {AI, IO, Trace} {
+  { f: func(ctx: AiCtx, _msgs: [Msg]) -> PreStepOutcome {
       let _ = readFile("ailang.toml");
       { decision: { PassThrough }, next_state: ctx.world }
     } }
 }
 
+func control_compactor(w: ControlBody) -> (AiCtx, [Msg]) -> PreStepOutcome ! {AI, IO, Trace} {
+  func(ctx: AiCtx, msgs: [Msg]) -> PreStepOutcome ! {AI, IO, Trace} { control_apply(w, ctx, msgs) }
+}
+
 func env_control_hooks() -> ExtEntry ! {Env} {
-  { id: "dvp_control", config: jo([]), caps: [Compactor(env_control_body().f), ToolPolicy(\_ctx _call. Allow)] }
+  { id: "dvp_control", config: jo([]), caps: [Compactor(control_compactor(env_control_body())), ToolPolicy(\_ctx _call. Allow)] }
 }
 
 func fs_control_hooks() -> ExtEntry ! {FS} {
-  { id: "dvp_control", config: jo([]), caps: [Compactor(fs_control_body().f), ToolPolicy(\_ctx _call. Allow)] }
+  { id: "dvp_control", config: jo([]), caps: [Compactor(control_compactor(fs_control_body())), ToolPolicy(\_ctx _call. Allow)] }
 }
 
 pure func budget_sentinel() -> int { 4242 }
