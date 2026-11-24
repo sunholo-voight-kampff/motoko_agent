@@ -765,7 +765,7 @@ pure func runtime_status_tool_message(call: ToolCall, content: string) -> Option
     content: content,
     tool_calls: [],
     tool_call_id: call.id,
-    images: []
+    media: []
   }) else None
 }
 
@@ -2070,7 +2070,7 @@ func policy_denied_message(call: ToolCall, reason: string) -> Message {
     content: denial_payload,
     tool_calls: [],
     tool_call_id: call.id,
-    images: []
+    media: []
   }
 }
 
@@ -2858,7 +2858,7 @@ pure func wake_message(wake: WakeInput) -> Message {
     HostError(m) => "${tag} Wake: the host could not observe the open waits (${m}). They stay open.",
     Aborted => "${tag} Wake: the park was cancelled (${wake.wait_id})."
   };
-  { role: "user", content: content, tool_calls: [], tool_call_id: "", images: [] }
+  { role: "user", content: content, tool_calls: [], tool_call_id: "", media: [] }
 }
 
 -- R2: the dropped reply's `warning`, naming both sides of the mismatch. Not a
@@ -4341,7 +4341,7 @@ func conversation_loop_v2_with_policy(
           content: content,
           tool_calls: [],
           tool_call_id: "",
-          images: []
+          media: []
         };
         -- ADR-003 D1/D5: `run_started` names the run it opens. The identity is
         -- built BEFORE the banner rather than after it — same value, same
@@ -5235,7 +5235,7 @@ pure func kv_len(xs: [{key: string, value: Json}]) -> int {
 
 pure func mk_test_step_result(input: int, output: int, cr: int, cc: int) -> StepResult {
   {
-    message: { role: "assistant", content: "", tool_calls: [], tool_call_id: "", images: [] },
+    message: { role: "assistant", content: "", tool_calls: [], tool_call_id: "", media: [] },
     tool_calls: [],
     finish_reason: "stop",
     input_tokens: input,
@@ -5305,7 +5305,7 @@ func test_runtime_status_includes_prior_conversation_counts() -> bool ! {IO, Tra
       ]
     };
     let st: C2LoopState = {
-      msgs: [{ role: "system", content: "sys", tool_calls: [], tool_call_id: "", images: [] }],
+      msgs: [{ role: "system", content: "sys", tool_calls: [], tool_call_id: "", media: [] }],
       step_idx: 1,
       totals: zero_totals(),
       ext_artifacts: jo([]),
@@ -5359,7 +5359,7 @@ func test_runtime_status_reports_actual_context_window() -> bool ! {IO, Trace}
   tests [((), true)]
   {
     let st: C2LoopState = {
-      msgs: [{ role: "system", content: "sys", tool_calls: [], tool_call_id: "", images: [] }],
+      msgs: [{ role: "system", content: "sys", tool_calls: [], tool_call_id: "", media: [] }],
       step_idx: 1,
       totals: zero_totals(),
       ext_artifacts: jo([]),
@@ -5734,8 +5734,8 @@ pure func test_both_open_sentence_names_every_open_wait_on_the_delegate_result()
   {
     let calls: [ToolCall] = [{ id: "c2", name: "Delegate", arguments: "{}" }, { id: "c3", name: "ReadFile", arguments: "{}" }];
     let msgs: [Message] = [
-      { role: "tool", content: "launched", tool_calls: [], tool_call_id: "c2", images: [] },
-      { role: "tool", content: "file", tool_calls: [], tool_call_id: "c3", images: [] }
+      { role: "tool", content: "launched", tool_calls: [], tool_call_id: "c2", media: [] },
+      { role: "tool", content: "file", tool_calls: [], tool_call_id: "c3", media: [] }
     ];
     let before = [w4_delegate("h1")];
     let after = [w4_delegate("h1"), w4_delegate("h2")];
