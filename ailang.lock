@@ -231,7 +231,7 @@
     },
     {
       "ailang": ">=0.21.0",
-      "content_hash": "sha256:a5bb5f685331c6eea725ef38164e843534853fe78fad8e0cfdf43f4df7904850",
+      "content_hash": "sha256:99f334eab97065c276fd1de4f23b8a629408e343afe9b70c4bf50c78c2bc4ec9",
       "effects": [
         "AI",
         "Clock",

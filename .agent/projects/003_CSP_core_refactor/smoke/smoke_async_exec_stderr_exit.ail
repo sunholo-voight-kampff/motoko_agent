@@ -3,11 +3,11 @@ module smoke_async_exec_stderr_exit
 import std/bytes (toString)
 import std/io (println)
 import std/stream (asyncExecProcess, selectEvents)
-import std/array (empty, unsafeGet)
+import std/array (empty, get)
 
 pure func fail_probe() -> bool {
   let xs: Array[int] = empty();
-  let _ = unsafeGet(xs, 0);
+  let _ = get(xs, 0);
   false
 }
 
